@@ -1,0 +1,75 @@
+export component MainWindow inherits Window {
+    background: transparent;
+    title: "VoidPath ED";
+    always-on-top: true;
+    no-frame: true;
+    height: 150px;
+    width: 600px;
+
+    in property <bool> is-route: false;
+    in property <bool> is-searching-route: false;
+
+    callback close-window();
+    callback open-settings();
+
+    Rectangle {
+        background: #2A2A2A;
+        border-radius: 6px;
+        height: 100%;
+        width: 100%;
+
+        VerticalLayout {
+            HorizontalLayout {
+                alignment: space-between;
+                padding: 10px;
+                height: 36px;
+
+                Rectangle {
+                    height: 16px;
+                    width: 16px;
+
+                    Image {
+                        colorize: settings-area.has-hover ? #ffffff : #707070;
+                        source: @image-url("assets/settings.svg");
+                        height: 16px;
+                        width: 16px;
+                    }
+
+                    settings-area := TouchArea {
+                        clicked => { root.open-settings(); }
+                    }
+                }
+
+                Rectangle {
+                    height: 16px;
+                    width: 16px;
+
+                    Image {
+                        colorize: close-area.has-hover ? #ff5f57 : #707070;
+                        source: @image-url("assets/close.svg");
+                        height: 16px;
+                        width: 16px;
+                    }
+
+                    close-area := TouchArea {
+                        clicked => { root.close-window(); }
+                    }
+                }
+            }
+
+            if !is-route: Rectangle {
+                vertical-stretch: 1;
+
+                Text {
+                    text: "There is no active route";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-family: "Inter";
+                    font-weight: 100;
+                    color: #FFFFFF;
+                    font-size: 12px;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,22 @@
+[package]
+name = "voidpath-rs"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+slint-build = "1.16.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging"] }
+
+[dependencies]
+reqwest = { version = "0.13.3", features = ["json", "form", "query"] }
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.52.3", features = ["full"] }
+tracing-subscriber = "0.3.23"
+tracing-appender = "0.2.5"
+thiserror = "2.0.18"
+tracing = "0.1.44"
+notify = "8.2.0"
+slint = "1.16.1"
+toml = "1.1.2"
