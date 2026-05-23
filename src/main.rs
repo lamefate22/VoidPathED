@@ -12,7 +12,7 @@ slint::include_modules!();
 #[tokio::main]
 async fn main() {
     let _guard = init_logger();
-    tracing::info!("Starting VoidPath...");
+    tracing::info!("Starting VoidPathED...");
 
     let init_window = InitWindow::new().unwrap();
 
