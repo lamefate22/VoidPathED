@@ -3,13 +3,14 @@ export component MainWindow inherits Window {
     title: "VoidPath ED";
     always-on-top: true;
     no-frame: true;
-    height: 150px;
+    height: 160px;
     width: 600px;
 
     in property <bool> is-route: false;
     in property <bool> is-searching-route: false;
 
     callback close-window();
+    callback search-route();
     callback open-settings();
 
     Rectangle {
@@ -21,7 +22,10 @@ export component MainWindow inherits Window {
         VerticalLayout {
             HorizontalLayout {
                 alignment: space-between;
-                padding: 10px;
+                padding-bottom: 0px;
+                padding-right: 10px;
+                padding-left: 10px;
+                padding-top: 10px;
                 height: 36px;
 
                 Rectangle {
@@ -57,17 +61,55 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if !is-route: Rectangle {
+            if !is-route: VerticalLayout {
+                padding-bottom: 40px;
                 vertical-stretch: 1;
+                alignment: center;
+                padding-top: 0px;
+                spacing: 8px;
+
+                HorizontalLayout {
+                    alignment: center;
+
+                    Image {
+                        source: @image-url("assets/no_route.svg");
+                        colorize: #5DCAA5;
+                        height: 32px;
+                        width: 32px;
+                    }
+                }
 
                 Text {
                     text: "There is no active route";
                     horizontal-alignment: center;
-                    vertical-alignment: center;
                     font-family: "Inter";
+                    font-italic: true;
                     font-weight: 100;
                     color: #FFFFFF;
                     font-size: 12px;
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    padding-top: 5px;
+
+                    Rectangle {
+                        background: search-btn.has-hover ? #4db896 : #5DCAA5;
+                        border-radius: 8px;
+                        height: 24px;
+                        width: 60px;
+
+                        Image {
+                            source: @image-url("assets/search.svg");
+                            colorize: #000000;
+                            height: 24px;
+                            width: 24px;
+                        }
+
+                        search-btn := TouchArea {
+                            clicked => { root.search-route() }
+                        }
+                    }
                 }
             }
         }
