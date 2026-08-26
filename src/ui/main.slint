@@ -525,16 +525,20 @@ export component MainWindow inherits Window {
             }
         }
 
-        // FLOATING TOP-RIGHT CONTROLS (DOES NOT AFFECT MAIN VERTICAL CENTERING)
+        // FLOATING TOP-RIGHT CONTROLS (ANCHORED RIGHT)
         HorizontalLayout {
-            x: root.width - self.width - 8px;
-            y: 8px;
-            spacing: 6px;
-            height: 20px;
+            x: 0px;
+            y: 0px;
+            width: root.width;
+            height: 32px;
+            alignment: end;
+            padding-right: 12px;
+            padding-top: 10px;
+            spacing: 8px;
 
             Rectangle {
-                height: 20px;
                 width: 20px;
+                height: 20px;
 
                 Image {
                     colorize: settings-area.has-hover ? #ffffff : #8E8E93;
@@ -549,8 +553,8 @@ export component MainWindow inherits Window {
             }
 
             Rectangle {
-                height: 20px;
                 width: 20px;
+                height: 20px;
 
                 Image {
                     colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
