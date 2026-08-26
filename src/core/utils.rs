@@ -4,7 +4,15 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::fmt;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
+use windows::core::HSTRING;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::HWND;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowW, GetSystemMetrics, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
+    SM_CXSCREEN, SM_CYSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+};
 
 use crate::core::settings::TOMLoader;
 use crate::error;
@@ -47,6 +55,30 @@ pub fn init_config() -> Result<TOMLoader, error::Core> {
     Ok(config)
 }
 
+#[cfg(target_os = "windows")]
+pub fn hide_window_from_taskbar(title: &str) {
+    unsafe {
+        let title_h = HSTRING::from(title);
+        if let Ok(hwnd) = FindWindowW(None, windows::core::PCWSTR(title_h.as_ptr())) {
+            if hwnd != HWND::default() {
+                let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                let new_ex_style = (ex_style | (WS_EX_TOOLWINDOW.0 as isize)) & !(WS_EX_APPWINDOW.0 as isize);
+                let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_ex_style);
+                let _ = SetWindowPos(
+                    hwnd,
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE,
+                );
+                tracing::info!("Applied WS_EX_TOOLWINDOW to hide '{}' from taskbar", title);
+            }
+        }
+    }
+}
+
 pub fn show_window<T, F>(window: T, setup: F)
 where
     T: slint::ComponentHandle + 'static,
@@ -54,6 +86,14 @@ where
 {
     window.show().unwrap();
     center_window_top(&window);
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = slint::invoke_from_event_loop(|| {
+            hide_window_from_taskbar("VoidPath ED");
+        });
+    }
+
     setup(&window);
     window.run().unwrap();
 }
@@ -78,6 +118,7 @@ where
 
                 window.window().set_position(slint::PhysicalPosition::new(x, y));
             }
+            hide_window_from_taskbar("VoidPath ED Settings");
         });
     }
 
@@ -103,6 +144,7 @@ pub fn center_window_top<T: slint::ComponentHandle + 'static>(window: &T) {
 
                 window.window().set_position(slint::PhysicalPosition::new(x, y));
             }
+            hide_window_from_taskbar("VoidPath ED");
         });
     }
 

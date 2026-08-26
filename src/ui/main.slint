@@ -3,8 +3,8 @@ export component MainWindow inherits Window {
     title: "VoidPath ED";
     always-on-top: true;
     no-frame: true;
-    height: 185px;
-    width: 680px;
+    height: 160px;
+    width: 620px;
 
     // View States
     in property <bool> is-route: false;
@@ -61,136 +61,24 @@ export component MainWindow inherits Window {
     }
 
     Rectangle {
-        background: #1C1C22;
+        background: #19191F;
         border-radius: 8px;
         border-width: 1px;
         border-color: #FFFFFF18;
         height: 100%;
         width: 100%;
 
+        // MAIN CONTENT - FULL VERTICAL & HORIZONTAL CENTERING
         VerticalLayout {
-            padding: 8px;
-            spacing: 6px;
-
-            // TOP NAVIGATION BAR
-            HorizontalLayout {
-                alignment: space-between;
-                height: 24px;
-                padding-left: 4px;
-                padding-right: 4px;
-
-                // Left: Logo & Journal Sync Indicator
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: start;
-
-                    // ED Journal Sync Dot
-                    HorizontalLayout {
-                        alignment: center;
-                        spacing: 4px;
-
-                        Rectangle {
-                            width: 7px;
-                            height: 7px;
-                            border-radius: 3.5px;
-                            background: root.journal-connected ? #5DCAA5 : #8E8E93;
-                            y: 8px;
-                        }
-
-                        Text {
-                            text: root.journal-connected ? "ED SYNC" : "ED OFFLINE";
-                            color: root.journal-connected ? #5DCAA5CC : #8E8E9380;
-                            font-size: 9px;
-                            font-family: "Inter";
-                            font-weight: 700;
-                            letter-spacing: 0.8px;
-                            vertical-alignment: center;
-                        }
-                    }
-
-                    Rectangle { width: 1px; height: 12px; background: #ffffff14; y: 6px; }
-
-                    Text {
-                        text: "VOIDPATH";
-                        color: #FFFFFFDD;
-                        font-size: 11px;
-                        font-family: "Inter";
-                        font-weight: 700;
-                        letter-spacing: 1.2px;
-                        vertical-alignment: center;
-                    }
-                }
-
-                // Middle: Notification toast if active
-                if show-notification: HorizontalLayout {
-                    alignment: center;
-                    Rectangle {
-                        background: #5DCAA520;
-                        border-radius: 4px;
-                        border-width: 0.5px;
-                        border-color: #5DCAA560;
-                        height: 20px;
-
-                        HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-
-                            Text {
-                                text: root.notification-message;
-                                color: #5DCAA5;
-                                font-size: 10px;
-                                font-family: "Inter";
-                                font-weight: 600;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                }
-
-                // Right: Settings & Close Icons
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: end;
-
-                    Rectangle {
-                        height: 20px;
-                        width: 20px;
-
-                        Image {
-                            colorize: settings-area.has-hover ? #ffffff : #8E8E93;
-                            source: @image-url("assets/settings.svg");
-                            height: 14px;
-                            width: 14px;
-                        }
-
-                        settings-area := TouchArea {
-                            clicked => { root.open-settings(); }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 20px;
-                        width: 20px;
-
-                        Image {
-                            colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
-                            source: @image-url("assets/close.svg");
-                            height: 14px;
-                            width: 14px;
-                        }
-
-                        close-area := TouchArea {
-                            clicked => { root.close-window(); }
-                        }
-                    }
-                }
-            }
+            padding: 12px;
+            alignment: center;
+            width: 100%;
+            height: 100%;
 
             // BODY: STATE 1 - SEARCHING ROUTE
             if is-searching-route: VerticalLayout {
                 alignment: center;
-                spacing: 8px;
-                vertical-stretch: 1;
+                spacing: 10px;
 
                 HorizontalLayout {
                     alignment: center;
@@ -199,8 +87,8 @@ export component MainWindow inherits Window {
                         source: @image-url("assets/spinner.svg");
                         transform-rotation: search-spinner-angle * 1deg;
                         colorize: #5DCAA5;
-                        height: 36px;
-                        width: 36px;
+                        height: 34px;
+                        width: 34px;
                     }
                 }
 
@@ -213,11 +101,10 @@ export component MainWindow inherits Window {
                 }
             }
 
-            // BODY: STATE 2 - NO ACTIVE ROUTE
+            // BODY: STATE 2 - NO ACTIVE ROUTE (PERFECTLY CENTERED)
             if !is-route && !is-searching-route: VerticalLayout {
                 alignment: center;
-                spacing: 8px;
-                vertical-stretch: 1;
+                spacing: 6px;
 
                 HorizontalLayout {
                     alignment: center;
@@ -226,8 +113,8 @@ export component MainWindow inherits Window {
                     Image {
                         source: @image-url("assets/no_route.svg");
                         colorize: #5DCAA5;
-                        height: 22px;
-                        width: 22px;
+                        height: 20px;
+                        width: 20px;
                     }
 
                     Text {
@@ -263,13 +150,13 @@ export component MainWindow inherits Window {
 
                 HorizontalLayout {
                     alignment: center;
-                    padding-top: 2px;
+                    padding-top: 4px;
 
                     Rectangle {
                         background: search-btn.has-hover ? #4db896 : #5DCAA5;
                         border-radius: 6px;
                         height: 28px;
-                        width: 140px;
+                        width: 145px;
 
                         HorizontalLayout {
                             alignment: center;
@@ -303,13 +190,13 @@ export component MainWindow inherits Window {
             // BODY: STATE 3 - ACTIVE ROUTE CARD
             if is-route && !is-searching-route: VerticalLayout {
                 spacing: 6px;
-                vertical-stretch: 1;
+                alignment: center;
 
                 // Step Status Line
                 HorizontalLayout {
                     alignment: space-between;
                     padding-left: 2px;
-                    padding-right: 2px;
+                    padding-right: 50px; // keep clear of top-right buttons
 
                     HorizontalLayout {
                         spacing: 6px;
@@ -373,18 +260,18 @@ export component MainWindow inherits Window {
                 // Two Info Cards: BUY (Source) and SELL (Destination)
                 HorizontalLayout {
                     spacing: 8px;
-                    height: 82px;
+                    height: 72px;
 
                     // SOURCE CARD (BUY)
                     Rectangle {
-                        background: #15151A;
+                        background: #141418;
                         border-radius: 6px;
                         border-width: 0.5px;
                         border-color: #3B82F630;
                         horizontal-stretch: 1;
 
                         VerticalLayout {
-                            padding: 8px;
+                            padding: 6px;
                             alignment: space-between;
 
                             HorizontalLayout {
@@ -423,7 +310,7 @@ export component MainWindow inherits Window {
                             Text {
                                 text: root.commodity-name;
                                 color: #FFFFFF;
-                                font-size: 13px;
+                                font-size: 12px;
                                 font-family: "Inter";
                                 font-weight: 700;
                             }
@@ -434,14 +321,14 @@ export component MainWindow inherits Window {
                                 Text {
                                     text: root.source-system + " • " + root.source-station;
                                     color: #FFFFFFB0;
-                                    font-size: 11px;
+                                    font-size: 10px;
                                     font-family: "Inter";
                                 }
 
                                 Text {
                                     text: "(" + root.source-dist + ")";
                                     color: #FFFFFF50;
-                                    font-size: 10px;
+                                    font-size: 9px;
                                     font-family: "Inter";
                                 }
                             }
@@ -450,14 +337,14 @@ export component MainWindow inherits Window {
 
                     // DESTINATION CARD (SELL)
                     Rectangle {
-                        background: #15151A;
+                        background: #141418;
                         border-radius: 6px;
                         border-width: 0.5px;
                         border-color: #10B98130;
                         horizontal-stretch: 1;
 
                         VerticalLayout {
-                            padding: 8px;
+                            padding: 6px;
                             alignment: space-between;
 
                             HorizontalLayout {
@@ -496,7 +383,7 @@ export component MainWindow inherits Window {
                             Text {
                                 text: root.dest-system;
                                 color: #FFFFFF;
-                                font-size: 13px;
+                                font-size: 12px;
                                 font-family: "Inter";
                                 font-weight: 700;
                             }
@@ -507,14 +394,14 @@ export component MainWindow inherits Window {
                                 Text {
                                     text: root.dest-station;
                                     color: #FFFFFFB0;
-                                    font-size: 11px;
+                                    font-size: 10px;
                                     font-family: "Inter";
                                 }
 
                                 Text {
                                     text: "(" + root.dest-dist + ")";
                                     color: #FFFFFF50;
-                                    font-size: 10px;
+                                    font-size: 9px;
                                     font-family: "Inter";
                                 }
                             }
@@ -534,7 +421,7 @@ export component MainWindow inherits Window {
                         Rectangle {
                             background: prev-btn.has-hover ? #ffffff20 : #ffffff0f;
                             border-radius: 4px;
-                            width: 65px;
+                            width: 60px;
                             height: 24px;
 
                             Text {
@@ -558,7 +445,7 @@ export component MainWindow inherits Window {
                             border-width: 0.5px;
                             border-color: #5DCAA550;
                             border-radius: 4px;
-                            width: 65px;
+                            width: 60px;
                             height: 24px;
 
                             Text {
@@ -634,6 +521,71 @@ export component MainWindow inherits Window {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // FLOATING TOP-RIGHT CONTROLS (DOES NOT AFFECT MAIN VERTICAL CENTERING)
+        HorizontalLayout {
+            x: root.width - self.width - 8px;
+            y: 8px;
+            spacing: 6px;
+            height: 20px;
+
+            Rectangle {
+                height: 20px;
+                width: 20px;
+
+                Image {
+                    colorize: settings-area.has-hover ? #ffffff : #8E8E93;
+                    source: @image-url("assets/settings.svg");
+                    height: 14px;
+                    width: 14px;
+                }
+
+                settings-area := TouchArea {
+                    clicked => { root.open-settings(); }
+                }
+            }
+
+            Rectangle {
+                height: 20px;
+                width: 20px;
+
+                Image {
+                    colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
+                    source: @image-url("assets/close.svg");
+                    height: 14px;
+                    width: 14px;
+                }
+
+                close-area := TouchArea {
+                    clicked => { root.close-window(); }
+                }
+            }
+        }
+
+        // FLOATING NOTIFICATION TOAST
+        if show-notification: Rectangle {
+            x: (root.width - self.width) / 2;
+            y: 8px;
+            background: #5DCAA520;
+            border-radius: 4px;
+            border-width: 0.5px;
+            border-color: #5DCAA560;
+            height: 20px;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+
+                Text {
+                    text: root.notification-message;
+                    color: #5DCAA5;
+                    font-size: 10px;
+                    font-family: "Inter";
+                    font-weight: 600;
+                    vertical-alignment: center;
                 }
             }
         }
