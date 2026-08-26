@@ -1,12 +1,13 @@
-use reqwest::{Client, header::{HeaderMap, HeaderValue}};
+use reqwest::{header::{HeaderMap, HeaderValue}, Client};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 
-use crate::api::models::route::{SearchRoute, RouteJob};
-use crate::api::models::trade::TradeRouteResult;
+use crate::api::models::route::{RouteJob, SearchRoute};
 use crate::api::models::stations::FoundStation;
+use crate::api::models::trade::TradeRouteResult;
 use crate::error;
 
+#[derive(Clone)]
 pub struct ApiClient {
     client: Client,
     base_url: String,
@@ -21,16 +22,17 @@ impl ApiClient {
         let request = self.client.head(self.base_url.to_string());
 
         match request.send().await?.error_for_status() {
-            Ok(_) => {
-                Ok(())
-            }
-            Err(e) => {
-                Err(error::API::RequestFailed(e))
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(error::API::RequestFailed(e)),
         }
     }
 
-    async fn get<T: DeserializeOwned>(&self, path: &str, query: Option<&[(&str, &str)]>, headers: Option<HeaderMap>) -> Result<T, error::API> {
+    async fn get<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: Option<&[(&str, &str)]>,
+        headers: Option<HeaderMap>,
+    ) -> Result<T, error::API> {
         let mut request = self.client.get(format!("{}{}", self.base_url, path));
 
         if let Some(h) = headers {
@@ -44,14 +46,25 @@ impl ApiClient {
         Ok(request.send().await?.error_for_status()?.json::<T>().await?)
     }
 
-    async fn post<T: DeserializeOwned, B: serde::Serialize>(&self, path: &str, body: &B, headers: Option<HeaderMap>) -> Result<T, error::API> {
+    async fn post<T: DeserializeOwned, B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+        headers: Option<HeaderMap>,
+    ) -> Result<T, error::API> {
         let mut request = self.client.post(format!("{}{}", self.base_url, path));
 
         if let Some(h) = headers {
             request = request.headers(h);
         }
 
-        Ok(request.form(body).send().await?.error_for_status()?.json::<T>().await?)
+        Ok(request
+            .form(body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<T>()
+            .await?)
     }
 
     pub async fn search_stations(&self, q: &str) -> Result<Vec<FoundStation>, error::API> {
@@ -60,19 +73,74 @@ impl ApiClient {
 
     pub async fn search_route(&self, body: &SearchRoute) -> Result<RouteJob, error::API> {
         let mut headers = HeaderMap::new();
-
         headers.insert("Origin", HeaderValue::from_static("https://spansh.co.uk"));
-        headers.insert("X-Requested-With", HeaderValue::from_static("XMLHttpRequest"));
+        headers.insert(
+            "X-Requested-With",
+            HeaderValue::from_static("XMLHttpRequest"),
+        );
 
         self.post("/api/trade/route", body, Some(headers)).await
     }
 
-    pub async fn await_route(&self, job: &str) -> Result<TradeRouteResult, error::API> {
+    pub async fn get_route_result(&self, job: &str) -> Result<TradeRouteResult, error::API> {
         let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-Requested-With",
+            HeaderValue::from_static("XMLHttpRequest"),
+        );
 
-        headers.insert("X-Requested-With", HeaderValue::from_static("XMLHttpRequest"));
+        self.get(&format!("/api/results/{}", job), None, Some(headers))
+            .await
+    }
 
-        self.get(&format!("/api/results/{}", job), None, None).await
+    pub async fn await_route(
+        &self,
+        job: &str,
+        poll_interval: Duration,
+        timeout: Duration,
+    ) -> Result<TradeRouteResult, error::API> {
+        let start = tokio::time::Instant::now();
+
+        loop {
+            if start.elapsed() > timeout {
+                return Err(error::API::Timeout(timeout.as_secs()));
+            }
+
+            match self.get_route_result(job).await {
+                Ok(res) => {
+                    if let Some(err) = &res.error {
+                        return Err(error::API::JobFailed(err.clone()));
+                    }
+
+                    if res.result.is_some() {
+                        return Ok(res);
+                    }
+
+                    // Check status/state
+                    let status = res.status.as_deref().unwrap_or("");
+                    let state = res.state.as_deref().unwrap_or("");
+
+                    if status == "error" || state == "failed" {
+                        return Err(error::API::JobFailed(
+                            res.error.unwrap_or_else(|| "Unknown Spansh error".to_string()),
+                        ));
+                    }
+
+                    tracing::debug!(
+                        "Route job {} status: {}, state: {}, elapsed: {:?}",
+                        job,
+                        status,
+                        state,
+                        start.elapsed()
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Transient error polling route job {}: {}", job, e);
+                }
+            }
+
+            tokio::time::sleep(poll_interval).await;
+        }
     }
 }
 
@@ -83,9 +151,14 @@ impl Default for ApiClient {
         headers.insert("Accept", HeaderValue::from_static("*/*"));
         headers.insert(
             "User-Agent",
-            HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7324.122 Safari/537.36")
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7324.122 Safari/537.36",
+            ),
         );
-        headers.insert("Referer", HeaderValue::from_static("https://spansh.co.uk/trade"));
+        headers.insert(
+            "Referer",
+            HeaderValue::from_static("https://spansh.co.uk/trade"),
+        );
 
         let client = Client::builder()
             .default_headers(headers)
@@ -95,7 +168,7 @@ impl Default for ApiClient {
 
         Self {
             client,
-            base_url: "https://spansh.co.uk".to_string()
+            base_url: "https://spansh.co.uk".to_string(),
         }
     }
 }

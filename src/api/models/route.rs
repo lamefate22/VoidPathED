@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::api::utils::bool_u8;
 
 // API Path: api/trade/route (request)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SearchRoute {
     #[serde(with = "bool_u8")]
     pub allow_restricted_access: bool,
@@ -26,12 +26,12 @@ pub struct SearchRoute {
     pub station: String,
     pub system: String,
     pub max_cargo: u16,
-    pub max_hops: u16
+    pub max_hops: u16,
 }
 
 // API Path: api/trade/route (response)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteJob {
     pub job: String,
-    pub status: String
+    pub status: String,
 }

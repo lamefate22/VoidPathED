@@ -1,0 +1,510 @@
+import { ScrollView, LineEdit, ListView } from "std-widgets.slint";
+
+export struct StationSuggestion {
+    name: string,
+    system: string,
+}
+
+component SettingInputRow inherits Rectangle {
+    in property <string> label;
+    in-out property <string> text;
+    in property <string> placeholder: "";
+    callback edited(string);
+
+    border-color: #FFFFFF0F;
+    background: #1E1E24;
+    border-width: 0.5px;
+    border-radius: 6px;
+    height: 40px;
+
+    HorizontalLayout {
+        alignment: space-between;
+        padding-right: 14px;
+        padding-left: 14px;
+
+        Text {
+            vertical-alignment: center;
+            color: #FFFFFFB3;
+            text: root.label;
+            font-size: 12px;
+            font-family: "Inter";
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            LineEdit {
+                text <=> root.text;
+                placeholder-text: root.placeholder;
+                font-size: 12px;
+                width: 120px;
+                height: 26px;
+                edited(val) => { root.edited(val); }
+            }
+        }
+    }
+}
+
+component SettingToggleRow inherits Rectangle {
+    in property <string> label;
+    in-out property <bool> checked;
+    callback toggled(bool);
+
+    border-color: #FFFFFF0F;
+    background: #1E1E24;
+    border-width: 0.5px;
+    border-radius: 6px;
+    height: 40px;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        alignment: space-between;
+
+        Text {
+            text: root.label;
+            color: #ffffffb3;
+            font-size: 12px;
+            font-family: "Inter";
+            vertical-alignment: center;
+        }
+
+        VerticalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 34px;
+                height: 20px;
+                border-radius: 10px;
+                background: root.checked ? #5DCAA5 : #ffffff1f;
+                animate background { duration: 150ms; }
+
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    x: root.checked ? 16px : 2px;
+                    y: 2px;
+                    animate x { duration: 150ms; }
+                }
+
+                TouchArea {
+                    clicked => {
+                        root.checked = !root.checked;
+                        root.toggled(root.checked);
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SettingsWindow inherits Window {
+    title: "VoidPath ED Settings";
+    background: transparent;
+    always-on-top: true;
+    no-frame: true;
+    height: 620px;
+    width: 480px;
+
+    callback station-selected(string, string);
+    callback station-query-changed(string);
+    callback auto-detect-location();
+    callback close-window();
+    callback save();
+
+    in property <[StationSuggestion]> station-suggestions: [];
+    in-out property <string> starting-point: "Sol / Galileo";
+    in-out property <string> selected-station: "Galileo";
+    in-out property <string> selected-system: "Sol";
+    in-out property <bool> show-suggestions: false;
+
+    // Route Parameters
+    in-out property <int> max-hops: 10;
+    in-out property <int> max-cargo: 500;
+    in-out property <int> max-price-age: 28800;
+    in-out property <int> max-hop-distance: 20;
+    in-out property <int> starting-capital: 1000000;
+    in-out property <int> max-system-distance: 100000000;
+
+    // Filters
+    in-out property <bool> allow-planetary: false;
+    in-out property <bool> permit: false;
+    in-out property <bool> allow-prohibited: false;
+    in-out property <bool> requires-large-pad: true;
+    in-out property <bool> allow-player-owned: true;
+    in-out property <bool> unique: false;
+    in-out property <bool> allow-restricted-access: false;
+
+    // App Settings
+    in-out property <bool> auto-advance-route: true;
+    in-out property <string> hotkey-str: "Ctrl+Shift+V";
+    in-out property <string> journal-path: "";
+
+    Rectangle {
+        background: #232328;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: #FFFFFF14;
+        height: 100%;
+        width: 100%;
+
+        VerticalLayout {
+            // Header
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 14px;
+                padding-bottom: 8px;
+                alignment: space-between;
+                height: 44px;
+
+                Text {
+                    text: "SETTINGS";
+                    letter-spacing: 1.5px;
+                    font-weight: 700;
+                    font-size: 13px;
+                    color: #5DCAA5;
+                    font-family: "Inter";
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    height: 20px;
+                    width: 20px;
+
+                    Image {
+                        source: @image-url("assets/close.svg");
+                        colorize: close-top-area.has-hover ? #ff5f57 : #707070;
+                        height: 16px;
+                        width: 16px;
+                    }
+
+                    close-top-area := TouchArea {
+                        clicked => { root.close-window(); }
+                    }
+                }
+            }
+
+            ScrollView {
+                height: root.height - 106px;
+
+                VerticalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    padding-bottom: 16px;
+                    spacing: 14px;
+
+                    // SECTION: STARTING POINT
+                    VerticalLayout {
+                        spacing: 6px;
+
+                        HorizontalLayout {
+                            alignment: space-between;
+
+                            Text {
+                                text: "STARTING POINT";
+                                letter-spacing: 1.2px;
+                                color: #FFFFFF50;
+                                font-size: 10px;
+                                font-family: "Inter";
+                                font-weight: 600;
+                            }
+
+                            Rectangle {
+                                background: detect-area.has-hover ? #5DCAA530 : #5DCAA515;
+                                border-radius: 4px;
+                                border-width: 0.5px;
+                                border-color: #5DCAA540;
+                                width: 95px;
+                                height: 18px;
+
+                                Text {
+                                    text: "Auto-detect ED";
+                                    color: #5DCAA5;
+                                    font-size: 9px;
+                                    font-family: "Inter";
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                detect-area := TouchArea {
+                                    clicked => { root.auto-detect-location(); }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            border-color: #FFFFFF0F;
+                            background: #1E1E24;
+                            border-width: 0.5px;
+                            border-radius: 6px;
+                            height: 40px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                padding-right: 14px;
+                                padding-left: 14px;
+
+                                Text {
+                                    vertical-alignment: center;
+                                    text: "Station / System";
+                                    color: #FFFFFFB3;
+                                    font-size: 12px;
+                                    font-family: "Inter";
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+
+                                    LineEdit {
+                                        edited(val) => {
+                                            root.starting-point = val;
+                                            root.show-suggestions = val.character-count > 1;
+                                            root.station-query-changed(val);
+                                        }
+                                        text <=> root.starting-point;
+                                        placeholder-text: "Type station name...";
+                                        font-size: 12px;
+                                        height: 26px;
+                                        width: 220px;
+                                    }
+                                }
+                            }
+                        }
+
+                        if show-suggestions && station-suggestions.length > 0: Rectangle {
+                            background: #18181E;
+                            border-radius: 6px;
+                            border-width: 0.5px;
+                            border-color: #ffffff25;
+                            height: min(station-suggestions.length * 36px, 180px);
+                            clip: true;
+
+                            ListView {
+                                for item in root.station-suggestions: Rectangle {
+                                    height: 36px;
+                                    background: item-area.has-hover ? #ffffff15 : transparent;
+
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        spacing: 8px;
+                                        alignment: start;
+
+                                        Text {
+                                            text: item.name;
+                                            color: #ffffff;
+                                            font-size: 12px;
+                                            font-family: "Inter";
+                                            font-weight: 500;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: item.system;
+                                            color: #ffffff60;
+                                            font-size: 11px;
+                                            font-family: "Inter";
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    item-area := TouchArea {
+                                        clicked => {
+                                            root.station-selected(item.system, item.name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // SECTION: ROUTE PARAMETERS
+                    VerticalLayout {
+                        spacing: 6px;
+
+                        Text {
+                            text: "ROUTE PARAMETERS";
+                            letter-spacing: 1.2px;
+                            color: #FFFFFF50;
+                            font-size: 10px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                        }
+
+                        VerticalLayout {
+                            spacing: 4px;
+
+                            SettingInputRow {
+                                label: "Max hops";
+                                text: root.max-hops;
+                                edited(v) => { root.max-hops = v.to-float(); }
+                            }
+                            SettingInputRow {
+                                label: "Max cargo (t)";
+                                text: root.max-cargo;
+                                edited(v) => { root.max-cargo = v.to-float(); }
+                            }
+                            SettingInputRow {
+                                label: "Price age (seconds)";
+                                text: root.max-price-age;
+                                edited(v) => { root.max-price-age = v.to-float(); }
+                            }
+                            SettingInputRow {
+                                label: "Hop distance (LY)";
+                                text: root.max-hop-distance;
+                                edited(v) => { root.max-hop-distance = v.to-float(); }
+                            }
+                            SettingInputRow {
+                                label: "Starting capital (CR)";
+                                text: root.starting-capital;
+                                edited(v) => { root.starting-capital = v.to-float(); }
+                            }
+                            SettingInputRow {
+                                label: "Max system distance (LS)";
+                                text: root.max-system-distance;
+                                edited(v) => { root.max-system-distance = v.to-float(); }
+                            }
+                        }
+                    }
+
+                    // SECTION: FILTERS
+                    VerticalLayout {
+                        spacing: 6px;
+
+                        Text {
+                            letter-spacing: 1.2px;
+                            color: #FFFFFF50;
+                            text: "FILTERS";
+                            font-size: 10px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                        }
+
+                        VerticalLayout {
+                            spacing: 4px;
+
+                            SettingToggleRow {
+                                label: "Requires large landing pad";
+                                checked <=> root.requires-large-pad;
+                            }
+                            SettingToggleRow {
+                                label: "Allow player-owned stations/carriers";
+                                checked <=> root.allow-player-owned;
+                            }
+                            SettingToggleRow {
+                                label: "Allow planetary stations";
+                                checked <=> root.allow-planetary;
+                            }
+                            SettingToggleRow {
+                                label: "Permit required systems";
+                                checked <=> root.permit;
+                            }
+                            SettingToggleRow {
+                                label: "Allow prohibited commodities";
+                                checked <=> root.allow-prohibited;
+                            }
+                            SettingToggleRow {
+                                label: "Unique systems only (loop)";
+                                checked <=> root.unique;
+                            }
+                            SettingToggleRow {
+                                label: "Allow restricted access";
+                                checked <=> root.allow-restricted-access;
+                            }
+                        }
+                    }
+
+                    // SECTION: APP SETTINGS
+                    VerticalLayout {
+                        spacing: 6px;
+
+                        Text {
+                            letter-spacing: 1.2px;
+                            color: #FFFFFF50;
+                            text: "APP SETTINGS";
+                            font-size: 10px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                        }
+
+                        VerticalLayout {
+                            spacing: 4px;
+
+                            SettingToggleRow {
+                                label: "Auto-advance route on ED Journal event";
+                                checked <=> root.auto-advance-route;
+                            }
+                            SettingInputRow {
+                                label: "Global Hotkey (Toggle Overlay)";
+                                text <=> root.hotkey-str;
+                                placeholder: "Ctrl+Shift+V";
+                            }
+                            SettingInputRow {
+                                label: "Custom Journal Folder";
+                                text <=> root.journal-path;
+                                placeholder: "Auto-detect default";
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: #ffffff0f; }
+
+            // Footer Actions
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                spacing: 10px;
+                height: 54px;
+
+                Rectangle {
+                    border-radius: 6px;
+                    background: close-btn.has-hover ? #ffffff15 : #ffffff0a;
+                    border-width: 0.5px;
+                    border-color: #ffffff18;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "Cancel";
+                        color: #ffffff80;
+                        font-size: 12px;
+                        font-family: "Inter";
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    close-btn := TouchArea {
+                        clicked => { root.close-window(); }
+                    }
+                }
+
+                Rectangle {
+                    border-radius: 6px;
+                    background: save-btn.has-hover ? #4db896 : #5DCAA5;
+                    horizontal-stretch: 1;
+
+                    Text {
+                        text: "Save Settings";
+                        color: #04342C;
+                        font-size: 12px;
+                        font-family: "Inter";
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    save-btn := TouchArea {
+                        clicked => { root.save(); }
+                    }
+                }
+            }
+        }
+    }
+}

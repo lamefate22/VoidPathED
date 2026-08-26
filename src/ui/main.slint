@@ -3,111 +3,635 @@ export component MainWindow inherits Window {
     title: "VoidPath ED";
     always-on-top: true;
     no-frame: true;
-    height: 160px;
-    width: 600px;
+    height: 185px;
+    width: 680px;
 
+    // View States
     in property <bool> is-route: false;
     in property <bool> is-searching-route: false;
+    in property <bool> journal-connected: false;
+    in property <string> search-status-text: "Calculating optimal trade route...";
+    in property <string> error-text: "";
+    in property <string> starting-location-text: "Sol / Galileo";
 
+    // Active Hop Data
+    in property <int> current-hop: 1;
+    in property <int> total-hops: 1;
+    in property <string> hop-distance: "0.0 LY";
+    in property <string> hop-profit: "0 CR";
+    in property <string> total-profit: "0 CR";
+
+    // Source Info (Buy)
+    in property <string> source-system: "Sol";
+    in property <string> source-station: "Galileo";
+    in property <string> source-dist: "0 ls";
+    in property <string> commodity-name: "Gold";
+    in property <string> commodity-amount: "0 t";
+    in property <string> buy-price: "0 CR";
+
+    // Destination Info (Sell)
+    in property <string> dest-system: "Alpha Centauri";
+    in property <string> dest-station: "Hutton Orbital";
+    in property <string> dest-dist: "0 ls";
+    in property <string> sell-price: "0 CR";
+    in property <string> unit-profit: "+0 CR/t";
+
+    // Notification toast / copy feedback
+    in property <string> notification-message: "";
+    in property <bool> show-notification: false;
+
+    // Animation helper for search spinner
+    in-out property <float> search-spinner-angle: 0;
+
+    // Callbacks
     callback close-window();
     callback search-route();
     callback open-settings();
+    callback next-hop();
+    callback prev-hop();
+    callback copy-dest-system();
+    callback clear-route();
+
+    Timer {
+        interval: 16ms;
+        running: is-searching-route;
+        triggered => {
+            search-spinner-angle = mod(search-spinner-angle + 6, 360);
+        }
+    }
 
     Rectangle {
-        background: #2A2A2A;
-        border-radius: 6px;
+        background: #1C1C22;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: #FFFFFF18;
         height: 100%;
         width: 100%;
 
         VerticalLayout {
+            padding: 8px;
+            spacing: 6px;
+
+            // TOP NAVIGATION BAR
             HorizontalLayout {
                 alignment: space-between;
-                padding-bottom: 0px;
-                padding-right: 10px;
-                padding-left: 10px;
-                padding-top: 10px;
-                height: 36px;
+                height: 24px;
+                padding-left: 4px;
+                padding-right: 4px;
 
-                Rectangle {
-                    height: 16px;
-                    width: 16px;
+                // Left: Logo & Journal Sync Indicator
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
 
-                    Image {
-                        colorize: settings-area.has-hover ? #ffffff : #707070;
-                        source: @image-url("assets/settings.svg");
-                        height: 16px;
-                        width: 16px;
+                    // ED Journal Sync Dot
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+
+                        Rectangle {
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 3.5px;
+                            background: root.journal-connected ? #5DCAA5 : #8E8E93;
+                            y: 8px;
+                        }
+
+                        Text {
+                            text: root.journal-connected ? "ED SYNC" : "ED OFFLINE";
+                            color: root.journal-connected ? #5DCAA5CC : #8E8E9380;
+                            font-size: 9px;
+                            font-family: "Inter";
+                            font-weight: 700;
+                            letter-spacing: 0.8px;
+                            vertical-alignment: center;
+                        }
                     }
 
-                    settings-area := TouchArea {
-                        clicked => { root.open-settings(); }
+                    Rectangle { width: 1px; height: 12px; background: #ffffff14; y: 6px; }
+
+                    Text {
+                        text: "VOIDPATH";
+                        color: #FFFFFFDD;
+                        font-size: 11px;
+                        font-family: "Inter";
+                        font-weight: 700;
+                        letter-spacing: 1.2px;
+                        vertical-alignment: center;
                     }
                 }
 
-                Rectangle {
-                    height: 16px;
-                    width: 16px;
+                // Middle: Notification toast if active
+                if show-notification: HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        background: #5DCAA520;
+                        border-radius: 4px;
+                        border-width: 0.5px;
+                        border-color: #5DCAA560;
+                        height: 20px;
 
-                    Image {
-                        colorize: close-area.has-hover ? #ff5f57 : #707070;
-                        source: @image-url("assets/close.svg");
-                        height: 16px;
-                        width: 16px;
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+
+                            Text {
+                                text: root.notification-message;
+                                color: #5DCAA5;
+                                font-size: 10px;
+                                font-family: "Inter";
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Right: Settings & Close Icons
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+
+                    Rectangle {
+                        height: 20px;
+                        width: 20px;
+
+                        Image {
+                            colorize: settings-area.has-hover ? #ffffff : #8E8E93;
+                            source: @image-url("assets/settings.svg");
+                            height: 14px;
+                            width: 14px;
+                        }
+
+                        settings-area := TouchArea {
+                            clicked => { root.open-settings(); }
+                        }
                     }
 
-                    close-area := TouchArea {
-                        clicked => { root.close-window(); }
+                    Rectangle {
+                        height: 20px;
+                        width: 20px;
+
+                        Image {
+                            colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
+                            source: @image-url("assets/close.svg");
+                            height: 14px;
+                            width: 14px;
+                        }
+
+                        close-area := TouchArea {
+                            clicked => { root.close-window(); }
+                        }
                     }
                 }
             }
 
-            if !is-route: VerticalLayout {
-                padding-bottom: 40px;
-                vertical-stretch: 1;
+            // BODY: STATE 1 - SEARCHING ROUTE
+            if is-searching-route: VerticalLayout {
                 alignment: center;
-                padding-top: 0px;
                 spacing: 8px;
+                vertical-stretch: 1;
 
                 HorizontalLayout {
                     alignment: center;
 
                     Image {
-                        source: @image-url("assets/no_route.svg");
+                        source: @image-url("assets/spinner.svg");
+                        transform-rotation: search-spinner-angle * 1deg;
                         colorize: #5DCAA5;
-                        height: 32px;
-                        width: 32px;
+                        height: 36px;
+                        width: 36px;
                     }
                 }
 
                 Text {
-                    text: "There is no active route";
+                    text: root.search-status-text;
                     horizontal-alignment: center;
                     font-family: "Inter";
-                    font-italic: true;
-                    font-weight: 100;
-                    color: #FFFFFF;
                     font-size: 12px;
+                    color: #FFFFFFB3;
+                }
+            }
+
+            // BODY: STATE 2 - NO ACTIVE ROUTE
+            if !is-route && !is-searching-route: VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                vertical-stretch: 1;
+
+                HorizontalLayout {
+                    alignment: center;
+                    spacing: 6px;
+
+                    Image {
+                        source: @image-url("assets/no_route.svg");
+                        colorize: #5DCAA5;
+                        height: 22px;
+                        width: 22px;
+                    }
+
+                    Text {
+                        text: "No active trade route";
+                        font-family: "Inter";
+                        font-weight: 500;
+                        color: #FFFFFF90;
+                        font-size: 13px;
+                        vertical-alignment: center;
+                    }
                 }
 
                 HorizontalLayout {
                     alignment: center;
-                    padding-top: 5px;
+
+                    Text {
+                        text: "Start: " + root.starting-location-text;
+                        font-family: "Inter";
+                        font-size: 11px;
+                        color: #FFFFFF60;
+                    }
+                }
+
+                if error-text != "": HorizontalLayout {
+                    alignment: center;
+                    Text {
+                        text: root.error-text;
+                        color: #FF6B6B;
+                        font-size: 11px;
+                        font-family: "Inter";
+                    }
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    padding-top: 2px;
 
                     Rectangle {
                         background: search-btn.has-hover ? #4db896 : #5DCAA5;
-                        border-radius: 8px;
-                        height: 24px;
-                        width: 60px;
+                        border-radius: 6px;
+                        height: 28px;
+                        width: 140px;
 
-                        Image {
-                            source: @image-url("assets/search.svg");
-                            colorize: #000000;
-                            height: 24px;
-                            width: 24px;
+                        HorizontalLayout {
+                            alignment: center;
+                            spacing: 6px;
+
+                            Image {
+                                source: @image-url("assets/search.svg");
+                                colorize: #000000;
+                                height: 14px;
+                                width: 14px;
+                                y: 7px;
+                            }
+
+                            Text {
+                                text: "Find Trade Route";
+                                color: #04342C;
+                                font-family: "Inter";
+                                font-size: 11px;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                            }
                         }
 
                         search-btn := TouchArea {
-                            clicked => { root.search-route() }
+                            clicked => { root.search-route(); }
+                        }
+                    }
+                }
+            }
+
+            // BODY: STATE 3 - ACTIVE ROUTE CARD
+            if is-route && !is-searching-route: VerticalLayout {
+                spacing: 6px;
+                vertical-stretch: 1;
+
+                // Step Status Line
+                HorizontalLayout {
+                    alignment: space-between;
+                    padding-left: 2px;
+                    padding-right: 2px;
+
+                    HorizontalLayout {
+                        spacing: 6px;
+
+                        Rectangle {
+                            background: #5DCAA520;
+                            border-radius: 4px;
+                            border-width: 0.5px;
+                            border-color: #5DCAA550;
+                            height: 18px;
+
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+
+                                Text {
+                                    text: "Hop " + root.current-hop + " / " + root.total-hops;
+                                    color: #5DCAA5;
+                                    font-size: 10px;
+                                    font-family: "Inter";
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "Distance: " + root.hop-distance;
+                            color: #FFFFFF80;
+                            font-size: 11px;
+                            font-family: "Inter";
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6px;
+
+                        Text {
+                            text: "Hop Profit: " + root.hop-profit;
+                            color: #5DCAA5;
+                            font-size: 11px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle { width: 1px; height: 10px; background: #ffffff14; y: 4px; }
+
+                        Text {
+                            text: "Total: " + root.total-profit;
+                            color: #FFFFFFB3;
+                            font-size: 11px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Two Info Cards: BUY (Source) and SELL (Destination)
+                HorizontalLayout {
+                    spacing: 8px;
+                    height: 82px;
+
+                    // SOURCE CARD (BUY)
+                    Rectangle {
+                        background: #15151A;
+                        border-radius: 6px;
+                        border-width: 0.5px;
+                        border-color: #3B82F630;
+                        horizontal-stretch: 1;
+
+                        VerticalLayout {
+                            padding: 8px;
+                            alignment: space-between;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+
+                                Rectangle {
+                                    background: #3B82F625;
+                                    border-radius: 3px;
+                                    height: 15px;
+
+                                    HorizontalLayout {
+                                        padding-left: 4px;
+                                        padding-right: 4px;
+
+                                        Text {
+                                            text: "BUY";
+                                            color: #60A5FA;
+                                            font-size: 9px;
+                                            font-family: "Inter";
+                                            font-weight: 800;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.commodity-amount + " @ " + root.buy-price;
+                                    color: #93C5FD;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Text {
+                                text: root.commodity-name;
+                                color: #FFFFFF;
+                                font-size: 13px;
+                                font-family: "Inter";
+                                font-weight: 700;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                Text {
+                                    text: root.source-system + " • " + root.source-station;
+                                    color: #FFFFFFB0;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                }
+
+                                Text {
+                                    text: "(" + root.source-dist + ")";
+                                    color: #FFFFFF50;
+                                    font-size: 10px;
+                                    font-family: "Inter";
+                                }
+                            }
+                        }
+                    }
+
+                    // DESTINATION CARD (SELL)
+                    Rectangle {
+                        background: #15151A;
+                        border-radius: 6px;
+                        border-width: 0.5px;
+                        border-color: #10B98130;
+                        horizontal-stretch: 1;
+
+                        VerticalLayout {
+                            padding: 8px;
+                            alignment: space-between;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+
+                                Rectangle {
+                                    background: #10B98125;
+                                    border-radius: 3px;
+                                    height: 15px;
+
+                                    HorizontalLayout {
+                                        padding-left: 4px;
+                                        padding-right: 4px;
+
+                                        Text {
+                                            text: "SELL";
+                                            color: #34D399;
+                                            font-size: 9px;
+                                            font-family: "Inter";
+                                            font-weight: 800;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.unit-profit;
+                                    color: #34D399;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Text {
+                                text: root.dest-system;
+                                color: #FFFFFF;
+                                font-size: 13px;
+                                font-family: "Inter";
+                                font-weight: 700;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                Text {
+                                    text: root.dest-station;
+                                    color: #FFFFFFB0;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                }
+
+                                Text {
+                                    text: "(" + root.dest-dist + ")";
+                                    color: #FFFFFF50;
+                                    font-size: 10px;
+                                    font-family: "Inter";
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // BOTTOM ACTION / NAVIGATION BAR
+                HorizontalLayout {
+                    alignment: space-between;
+                    height: 24px;
+
+                    HorizontalLayout {
+                        spacing: 4px;
+
+                        // Prev Hop Button
+                        Rectangle {
+                            background: prev-btn.has-hover ? #ffffff20 : #ffffff0f;
+                            border-radius: 4px;
+                            width: 65px;
+                            height: 24px;
+
+                            Text {
+                                text: "◄ Prev";
+                                color: root.current-hop > 1 ? #FFFFFF : #FFFFFF40;
+                                font-size: 10px;
+                                font-family: "Inter";
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            prev-btn := TouchArea {
+                                clicked => { root.prev-hop(); }
+                            }
+                        }
+
+                        // Next Hop Button
+                        Rectangle {
+                            background: next-btn.has-hover ? #5DCAA540 : #5DCAA520;
+                            border-width: 0.5px;
+                            border-color: #5DCAA550;
+                            border-radius: 4px;
+                            width: 65px;
+                            height: 24px;
+
+                            Text {
+                                text: "Next ►";
+                                color: #5DCAA5;
+                                font-size: 10px;
+                                font-family: "Inter";
+                                font-weight: 700;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            next-btn := TouchArea {
+                                clicked => { root.next-hop(); }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4px;
+
+                        // Copy Destination System Name to Clipboard
+                        Rectangle {
+                            background: copy-btn.has-hover ? #3B82F635 : #3B82F618;
+                            border-width: 0.5px;
+                            border-color: #3B82F640;
+                            border-radius: 4px;
+                            height: 24px;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+
+                                Text {
+                                    text: "📋 Copy Target System";
+                                    color: #93C5FD;
+                                    font-size: 10px;
+                                    font-family: "Inter";
+                                    font-weight: 600;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            copy-btn := TouchArea {
+                                clicked => { root.copy-dest-system(); }
+                            }
+                        }
+
+                        // Clear Route Button
+                        Rectangle {
+                            background: clear-btn.has-hover ? #FF5F5725 : #ffffff0a;
+                            border-radius: 4px;
+                            height: 24px;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+
+                                Text {
+                                    text: "Clear";
+                                    color: clear-btn.has-hover ? #FF5F57 : #FFFFFF60;
+                                    font-size: 10px;
+                                    font-family: "Inter";
+                                    font-weight: 500;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            clear-btn := TouchArea {
+                                clicked => { root.clear-route(); }
+                            }
                         }
                     }
                 }
