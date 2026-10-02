@@ -47,7 +47,7 @@ impl StatusWatcher for GameStatusWatcher {
         let callback = Arc::new(callback);
 
         std::thread::spawn(move || {
-            tracing::info!("Started ED Status.json watcher for {:?}", path);
+            tracing::info!("ED Status.json watcher started: {:?}", path);
             let mut last_modified = None;
 
             while is_running.load(Ordering::SeqCst) {

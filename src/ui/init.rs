@@ -28,18 +28,18 @@ pub fn show_init_window(spansh: Arc<dyn SpanshClient>) {
         let spansh = Arc::clone(&spansh);
 
         let spawn_res = slint::spawn_local(async move {
-            tracing::info!("Running Spansh API connectivity check...");
+            tracing::info!("Checking Spansh API connection...");
             let Some(win) = window_weak.upgrade() else {
                 return;
             };
 
             match spansh.check_health().await {
                 Ok(_) => {
-                    tracing::info!("Connectivity status: OK");
+                    tracing::info!("Spansh API: OK");
                     let _ = win.hide();
                 }
                 Err(e) => {
-                    tracing::error!("Connectivity status: ERR - {}", e);
+                    tracing::error!("Spansh API error: {}", e);
                     win.set_is_loading(false);
                     win.set_is_error(true);
                     win.set_error_message(e.to_string().into());

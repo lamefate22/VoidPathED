@@ -5,6 +5,27 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt, registry};
 
+struct CompactTime;
+
+impl tracing_subscriber::fmt::time::FormatTime for CompactTime {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        let now = std::time::SystemTime::now();
+        let duration = now
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let secs = duration.as_secs();
+        let hours = (secs / 3600) % 24;
+        let minutes = (secs / 60) % 60;
+        let seconds = secs % 60;
+        let millis = duration.subsec_millis();
+        write!(
+            w,
+            "{:02}:{:02}:{:02}.{:03}",
+            hours, minutes, seconds, millis
+        )
+    }
+}
+
 pub fn get_app_dir() -> PathBuf {
     // In development mode (Cargo.toml exists in cwd), use working directory.
     // In release distribution, use the directory containing the executable.
@@ -33,9 +54,16 @@ pub fn init_logger() -> WorkerGuard {
 
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    let file_layer = fmt::layer().with_writer(non_blocking).with_ansi(false);
+    let file_layer = fmt::layer()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(false)
+        .with_timer(CompactTime);
 
-    let stdout_layer = fmt::layer().with_writer(std::io::stdout);
+    let stdout_layer = fmt::layer()
+        .with_writer(std::io::stdout)
+        .with_target(false)
+        .with_timer(CompactTime);
 
     registry()
         .with(env_filter)

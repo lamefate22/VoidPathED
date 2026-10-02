@@ -29,7 +29,7 @@ pub fn hide_window_from_taskbar(title: &str) {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE,
             );
-            tracing::info!("Applied WS_EX_TOOLWINDOW to hide '{}' from taskbar", title);
+            tracing::debug!("Applied WS_EX_TOOLWINDOW to hide '{}' from taskbar", title);
         }
     }
 }
@@ -144,13 +144,6 @@ where
         tracing::error!("Failed to show window: {}", e);
     }
     center_window_top(&window);
-
-    #[cfg(target_os = "windows")]
-    {
-        let _ = slint::invoke_from_event_loop(|| {
-            hide_window_from_taskbar("VoidPath ED");
-        });
-    }
 
     setup(&window);
     if let Err(e) = window.run() {

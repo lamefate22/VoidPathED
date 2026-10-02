@@ -29,6 +29,13 @@ impl GameTracker {
                 state.current_system = system.clone();
                 if let Some(st_name) = station {
                     state.current_station = st_name.clone();
+                    tracing::info!("Location: {} @ {} (Docked)", system, st_name);
+                } else {
+                    tracing::info!(
+                        "Location: {} ({})",
+                        system,
+                        if *docked { "Docked" } else { "In space" }
+                    );
                 }
                 state.is_docked = *docked;
                 EventOutcome {
@@ -38,6 +45,7 @@ impl GameTracker {
                 }
             }
             GameEvent::Jump { system } => {
+                tracing::info!("Jumped to system: {}", system);
                 state.current_system = system.clone();
                 state.is_docked = false;
                 EventOutcome {
@@ -47,6 +55,7 @@ impl GameTracker {
                 }
             }
             GameEvent::Docked { system, station } => {
+                tracing::info!("Docked at: {} ({})", station, system);
                 state.current_system = system.clone();
                 state.current_station = station.clone();
                 state.is_docked = true;
@@ -58,7 +67,7 @@ impl GameTracker {
                     && step.destination.station.eq_ignore_ascii_case(station)
                 {
                     tracing::info!(
-                        "Auto-advancing route hop on arrival at target: {} / {}",
+                        "Route auto-advance: arrived at target {} / {}",
                         system,
                         station
                     );
@@ -71,6 +80,7 @@ impl GameTracker {
                 }
             }
             GameEvent::Undocked { .. } => {
+                tracing::info!("Undocked from {}", state.current_station);
                 state.is_docked = false;
                 EventOutcome {
                     changed: true,
@@ -93,7 +103,7 @@ impl GameTracker {
 
                     if is_matching_commodity {
                         tracing::info!(
-                            "Auto-advancing route hop on selling target commodity '{}' at {}",
+                            "Route auto-advance: sold target commodity '{}' at {}",
                             commodity,
                             state.current_system
                         );
@@ -108,10 +118,16 @@ impl GameTracker {
                 EventOutcome::default()
             }
             GameEvent::Loadout(loadout) => {
+                let name = loadout.ship_name.trim();
+                let ship_desc = if name.is_empty() || name.eq_ignore_ascii_case(&loadout.ship_type)
+                {
+                    loadout.ship_type.clone()
+                } else {
+                    format!("\"{}\" ({})", name, loadout.ship_type)
+                };
                 tracing::info!(
-                    "Player ship loadout detected: {} ({}) - Cargo: {}t, Jump: {:.1} LY, Pad: {:?}",
-                    loadout.ship_name,
-                    loadout.ship_type,
+                    "Ship: {} | Cargo: {}t | Jump: {:.1} LY | Pad: {:?}",
+                    ship_desc,
                     loadout.cargo_capacity,
                     loadout.max_jump_range,
                     loadout.pad_size
@@ -124,7 +140,7 @@ impl GameTracker {
                 }
             }
             GameEvent::Cargo(cargo) => {
-                tracing::info!("Player cargo hold updated: {} items on board", cargo.count);
+                tracing::info!("Cargo: {}t on board", cargo.count);
                 state.current_cargo = Some(cargo.clone());
                 EventOutcome {
                     changed: true,

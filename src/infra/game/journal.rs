@@ -218,10 +218,10 @@ impl JournalWatcher for GameJournalWatcher {
         let callback = Arc::new(callback);
 
         std::thread::spawn(move || {
-            tracing::info!("Started ED Journal watcher for directory {:?}", dir);
+            tracing::info!("ED Journal watcher started: {:?}", dir);
 
             for initial_event in Self::read_initial_events(&dir) {
-                tracing::info!("Initial journal state detected: {:?}", initial_event);
+                tracing::debug!("Initial journal event: {:?}", initial_event);
                 callback(initial_event);
             }
 
@@ -268,7 +268,7 @@ impl JournalWatcher for GameJournalWatcher {
                             let reader = BufReader::new(file);
                             for line in reader.lines().map_while(Result::ok) {
                                 if let Some(event) = Self::parse_journal_line(&line) {
-                                    tracing::info!("Journal event: {:?}", event);
+                                    tracing::debug!("Journal event: {:?}", event);
                                     callback(event);
                                 }
                             }
@@ -286,7 +286,7 @@ impl JournalWatcher for GameJournalWatcher {
                 {
                     last_cargo_modified = Some(mod_time);
                     if let Some(cargo) = Self::read_cargo_json(&dir) {
-                        tracing::info!("Cargo.json updated: {:?}", cargo);
+                        tracing::debug!("Cargo.json updated: {:?}", cargo);
                         callback(GameEvent::Cargo(cargo));
                     }
                 }
