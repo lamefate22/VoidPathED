@@ -2,7 +2,7 @@ use slint::ComponentHandle;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::contract::{ConfigStore, SpanshClient};
+use crate::contract::{ConfigStore, HotkeyListener, SpanshClient};
 use crate::domain::config::AppConfig;
 use crate::domain::state::AppState;
 use crate::infra::os::window::show_child_window_centered;
@@ -21,13 +21,15 @@ pub fn show_settings_window(
     config_store: Arc<dyn ConfigStore>,
     state: Arc<Mutex<AppState>>,
     spansh: Arc<dyn SpanshClient>,
+    hotkey: Arc<dyn HotkeyListener>,
+    toggle_overlay: Arc<dyn Fn() + Send + Sync + 'static>,
     main_window_weak: slint::Weak<MainWindow>,
-) {
+) -> slint::Weak<SettingsWindow> {
     let window = match SettingsWindow::new() {
         Ok(w) => w,
         Err(e) => {
             tracing::error!("Failed to create SettingsWindow: {}", e);
-            return;
+            return slint::Weak::default();
         }
     };
 
@@ -73,16 +75,57 @@ pub fn show_settings_window(
         }
     }
 
+    let weak_win = window.as_weak();
     show_child_window_centered(
         window,
         move |win| {
+            // Drag window callback
+            win.on_window_drag_started(|| {
+                crate::infra::os::window::drag_window("VoidPath ED Settings");
+            });
+
             // Close window callback
             win.on_close_window({
                 let w = win.as_weak();
+                let hotkey = Arc::clone(&hotkey);
+                let toggle = Arc::clone(&toggle_overlay);
+                let config = Arc::clone(&config);
                 move || {
                     if let Some(w) = w.upgrade() {
+                        if w.get_is_recording_hotkey() {
+                            w.set_is_recording_hotkey(false);
+                        }
+                        let cfg = lock_mutex(&config);
+                        let t = toggle.clone();
+                        let _ = hotkey.register(&cfg.general.hotkey, Box::new(move || t()));
                         let _ = w.hide();
                     }
+                }
+            });
+
+            // Hotkey recording started callback (unregisters hotkey so keys reach SettingsWindow)
+            win.on_hotkey_recording_started({
+                let hotkey = Arc::clone(&hotkey);
+                move || {
+                    hotkey.stop();
+                }
+            });
+
+            // Hotkey recording ended callback (restores active hotkey)
+            win.on_hotkey_recording_ended({
+                let hotkey = Arc::clone(&hotkey);
+                let toggle = Arc::clone(&toggle_overlay);
+                let config = Arc::clone(&config);
+                let w = win.as_weak();
+                move || {
+                    let current = if let Some(win) = w.upgrade() {
+                        win.get_hotkey_str().to_string()
+                    } else {
+                        let cfg = lock_mutex(&config);
+                        cfg.general.hotkey.clone()
+                    };
+                    let t = toggle.clone();
+                    let _ = hotkey.register(&current, Box::new(move || t()));
                 }
             });
 
@@ -198,6 +241,8 @@ pub fn show_settings_window(
                 let config = Arc::clone(&config);
                 let config_store = Arc::clone(&config_store);
                 let state = Arc::clone(&state);
+                let hotkey = Arc::clone(&hotkey);
+                let toggle_overlay = Arc::clone(&toggle_overlay);
                 let main_weak = main_window_weak.clone();
 
                 move || {
@@ -226,19 +271,26 @@ pub fn show_settings_window(
                     s.unique = win.get_unique();
                     s.permit = win.get_permit();
 
-                    let g = &mut cfg.general;
-                    g.auto_advance_route = win.get_auto_advance_route();
-                    g.auto_sync_ship = win.get_auto_sync_ship();
-                    g.auto_copy_system = win.get_auto_copy_system();
-                    g.sound_enabled = win.get_sound_enabled();
-                    g.hotkey = win.get_hotkey_str().to_string();
-                    g.journal_path = win.get_journal_path().to_string();
+                    let saved_hotkey = win.get_hotkey_str().to_string();
+                    {
+                        let g = &mut cfg.general;
+                        g.auto_advance_route = win.get_auto_advance_route();
+                        g.auto_sync_ship = win.get_auto_sync_ship();
+                        g.auto_copy_system = win.get_auto_copy_system();
+                        g.sound_enabled = win.get_sound_enabled();
+                        g.hotkey = saved_hotkey.clone();
+                        g.journal_path = win.get_journal_path().to_string();
+                    }
 
                     if let Err(e) = config_store.save(&cfg) {
                         tracing::error!("Failed to save config: {}", e);
                     } else {
                         tracing::info!("Config saved successfully");
                     }
+
+                    // Re-register hotkey with updated configuration
+                    let t = toggle_overlay.clone();
+                    let _ = hotkey.register(&saved_hotkey, Box::new(move || t()));
 
                     // Update main UI with updated config
                     if let Some(main_win) = main_weak.upgrade() {
@@ -270,17 +322,25 @@ pub fn show_settings_window(
             // Hotkey recording callback
             win.on_hotkey_key_pressed({
                 let w = win.as_weak();
+                let hotkey = Arc::clone(&hotkey);
+                let toggle = Arc::clone(&toggle_overlay);
+                let config = Arc::clone(&config);
                 move |text, ctrl, alt, shift, win_mod| {
                     if let Some(win) = w.upgrade() {
                         if text == "\u{1b}" {
                             win.set_is_recording_hotkey(false);
+                            let cfg = lock_mutex(&config);
+                            let t = toggle.clone();
+                            let _ = hotkey.register(&cfg.general.hotkey, Box::new(move || t()));
                             return;
                         }
                         if let Some(shortcut) = crate::ui::mapper::format_hotkey_from_event(
                             &text, ctrl, alt, shift, win_mod,
                         ) {
-                            win.set_hotkey_str(shortcut.into());
+                            win.set_hotkey_str(shortcut.clone().into());
                             win.set_is_recording_hotkey(false);
+                            let t = toggle.clone();
+                            let _ = hotkey.register(&shortcut, Box::new(move || t()));
                         }
                     }
                 }
@@ -289,4 +349,5 @@ pub fn show_settings_window(
         460,
         580,
     );
+    weak_win
 }

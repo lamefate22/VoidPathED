@@ -102,7 +102,7 @@ component SettingToggleRow inherits Rectangle {
 }
 
 export component SettingsWindow inherits Window {
-    title: "Settings";
+    title: "VoidPath ED Settings";
     background: transparent;
     always-on-top: true;
     no-frame: true;
@@ -116,6 +116,9 @@ export component SettingsWindow inherits Window {
     callback save();
     callback browse-journal-path();
     callback hotkey-key-pressed(string, bool, bool, bool, bool);
+    callback hotkey-recording-started();
+    callback hotkey-recording-ended();
+    callback window-drag-started();
 
     in property <[StationSuggestion]> station-suggestions: [];
     in-out property <string> starting-point: "Sol / Galileo";
@@ -177,40 +180,52 @@ export component SettingsWindow inherits Window {
         clip: true;
 
         VerticalLayout {
-            // Header
+            // Header (Draggable)
             HorizontalLayout {
                 padding-left: 14px;
                 padding-right: 14px;
-                padding-top: 10px;
+                padding-top: 8px;
                 padding-bottom: 8px;
                 alignment: space-between;
-                height: 38px;
+                height: 36px;
 
-                Text {
-                    text: "Settings";
-                    font-weight: 600;
-                    font-size: 13px;
-                    color: #FFFFFF;
-                    font-family: "Inter";
-                    vertical-alignment: center;
+                // Drag handle area spanning the header
+                TouchArea {
+                    horizontal-stretch: 1;
+                    mouse-cursor: move;
+                    pointer-event(event) => {
+                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                            root.window-drag-started();
+                        }
+                    }
                 }
 
-                Rectangle {
-                    height: 20px;
-                    width: 20px;
-                    border-radius: 4px;
-                    background: close-top-area.has-hover ? #ff5f5725 : transparent;
+                VerticalLayout {
+                    alignment: center;
 
-                    Image {
-                        source: @image-url("assets/close.svg");
-                        colorize: close-top-area.has-hover ? #ff5f57 : #707070;
-                        height: 14px;
-                        width: 14px;
-                    }
+                    Rectangle {
+                        height: 20px;
+                        width: 20px;
+                        border-radius: 4px;
+                        background: close-top-area.has-hover ? #ff5f5725 : transparent;
 
-                    close-top-area := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.close-window(); }
+                        Image {
+                            source: @image-url("assets/close.svg");
+                            colorize: close-top-area.has-hover ? #ff5f57 : #707070;
+                            height: 14px;
+                            width: 14px;
+                        }
+
+                        close-top-area := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                if (root.is-recording-hotkey) {
+                                    root.is-recording-hotkey = false;
+                                    root.hotkey-recording-ended();
+                                }
+                                root.close-window();
+                            }
+                        }
                     }
                 }
             }
@@ -507,7 +522,7 @@ export component SettingsWindow inherits Window {
                         Rectangle {
                             border-color: root.is-recording-hotkey ? #5DCAA580 : #FFFFFF0D;
                             background: root.is-recording-hotkey ? #5DCAA510 : #ffffff05;
-                            border-width: root.is-recording-hotkey ? 1px : 0.5px;
+                            border-width: 0.5px;
                             border-radius: 5px;
                             height: 32px;
 
@@ -524,61 +539,73 @@ export component SettingsWindow inherits Window {
                                     font-family: "Inter";
                                 }
 
-                                HorizontalLayout {
+                                VerticalLayout {
                                     alignment: center;
-                                    spacing: 5px;
 
-                                    Rectangle {
-                                        background: root.is-recording-hotkey ? #5DCAA525 : (hotkey-btn.has-hover ? #ffffff15 : #ffffff0a);
-                                        border-color: root.is-recording-hotkey ? #5DCAA5 : #ffffff18;
-                                        border-width: 0.5px;
-                                        border-radius: 4px;
-                                        height: 22px;
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 5px;
 
-                                        HorizontalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 8px;
-                                            alignment: center;
+                                        Rectangle {
+                                            background: root.is-recording-hotkey ? #5DCAA525 : (hotkey-btn.has-hover ? #ffffff15 : #ffffff0a);
+                                            border-color: root.is-recording-hotkey ? #5DCAA5 : #ffffff18;
+                                            border-width: 0.5px;
+                                            border-radius: 4px;
+                                            height: 22px;
 
-                                            Text {
-                                                text: root.is-recording-hotkey ? "Press shortcut..." : root.hotkey-str;
-                                                color: root.is-recording-hotkey ? #5DCAA5 : #FFFFFF;
-                                                font-size: 11px;
-                                                font-family: "Inter";
-                                                font-weight: root.is-recording-hotkey ? 600 : 500;
-                                                vertical-alignment: center;
+                                            HorizontalLayout {
+                                                padding-left: 8px;
+                                                padding-right: 8px;
+                                                alignment: center;
+
+                                                Text {
+                                                    text: root.is-recording-hotkey ? "Press shortcut..." : root.hotkey-str;
+                                                    color: root.is-recording-hotkey ? #5DCAA5 : #FFFFFF;
+                                                    font-size: 11px;
+                                                    font-family: "Inter";
+                                                    font-weight: root.is-recording-hotkey ? 600 : 500;
+                                                    vertical-alignment: center;
+                                                }
                                             }
-                                        }
 
-                                        hotkey-btn := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                root.is-recording-hotkey = !root.is-recording-hotkey;
-                                                if (root.is-recording-hotkey) {
-                                                    hotkey-focus.focus();
+                                            hotkey-btn := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.is-recording-hotkey = !root.is-recording-hotkey;
+                                                    if (root.is-recording-hotkey) {
+                                                        root.hotkey-recording-started();
+                                                        hotkey-focus.focus();
+                                                    } else {
+                                                        root.hotkey-recording-ended();
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    if root.hotkey-str != "Ctrl+Shift+V" && !root.is-recording-hotkey: Rectangle {
-                                        width: 18px;
-                                        height: 18px;
-                                        border-radius: 3px;
-                                        background: reset-hk.has-hover ? #ffffff15 : transparent;
+                                        if root.hotkey-str != "Ctrl+Shift+V" && !root.is-recording-hotkey: Rectangle {
+                                            width: 22px;
+                                            height: 22px;
+                                            border-radius: 4px;
+                                            background: reset-hk.has-hover ? #ffffff15 : transparent;
 
-                                        Text {
-                                            text: "↺";
-                                            color: #FFFFFF60;
-                                            font-size: 11px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
+                                            HorizontalLayout {
+                                                alignment: center;
+                                                VerticalLayout {
+                                                    alignment: center;
+                                                    Image {
+                                                        source: @image-url("assets/reset.svg");
+                                                        colorize: reset-hk.has-hover ? #FFFFFF : #FFFFFF70;
+                                                        width: 12px;
+                                                        height: 12px;
+                                                    }
+                                                }
+                                            }
 
-                                        reset-hk := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                root.hotkey-str = "Ctrl+Shift+V";
+                                            reset-hk := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.hotkey-str = "Ctrl+Shift+V";
+                                                }
                                             }
                                         }
                                     }
@@ -607,75 +634,79 @@ export component SettingsWindow inherits Window {
                                     font-family: "Inter";
                                 }
 
-                                HorizontalLayout {
+                                VerticalLayout {
                                     alignment: center;
-                                    spacing: 5px;
 
-                                    Rectangle {
-                                        background: #ffffff08;
-                                        border-color: #ffffff10;
-                                        border-width: 0.5px;
-                                        border-radius: 4px;
-                                        height: 22px;
-                                        max-width: 170px;
+                                    HorizontalLayout {
+                                        alignment: end;
+                                        spacing: 5px;
 
-                                        HorizontalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 8px;
+                                        Rectangle {
+                                            background: #ffffff08;
+                                            border-color: #ffffff10;
+                                            border-width: 0.5px;
+                                            border-radius: 4px;
+                                            height: 22px;
+                                            max-width: 170px;
 
-                                            Text {
-                                                text: root.journal-path != "" ? root.journal-path : "Default (Auto-detect)";
-                                                color: root.journal-path != "" ? #FFFFFF : #FFFFFF50;
-                                                font-size: 10px;
-                                                font-family: "Inter";
-                                                overflow: elide;
-                                                vertical-alignment: center;
+                                            HorizontalLayout {
+                                                padding-left: 8px;
+                                                padding-right: 8px;
+
+                                                Text {
+                                                    text: root.journal-path != "" ? root.journal-path : "Default (Auto-detect)";
+                                                    color: root.journal-path != "" ? #FFFFFF : #FFFFFF50;
+                                                    font-size: 10px;
+                                                    font-family: "Inter";
+                                                    overflow: elide;
+                                                    vertical-alignment: center;
+                                                }
                                             }
                                         }
-                                    }
 
-                                    Rectangle {
-                                        background: browse-btn.has-hover ? #5DCAA530 : #ffffff10;
-                                        border-radius: 3px;
-                                        border-width: 0.5px;
-                                        border-color: #ffffff15;
-                                        width: 50px;
-                                        height: 22px;
+                                        Rectangle {
+                                            background: browse-btn.has-hover ? #5DCAA530 : #ffffff10;
+                                            border-radius: 3px;
+                                            border-width: 0.5px;
+                                            border-color: #ffffff15;
+                                            width: 50px;
+                                            height: 22px;
 
-                                        Text {
-                                            text: "Browse";
-                                            color: #5DCAA5;
-                                            font-size: 10px;
-                                            font-family: "Inter";
-                                            font-weight: 600;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                            Text {
+                                                text: "Browse";
+                                                color: #5DCAA5;
+                                                font-size: 10px;
+                                                font-family: "Inter";
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            browse-btn := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => { root.browse-journal-path(); }
+                                            }
                                         }
 
-                                        browse-btn := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => { root.browse-journal-path(); }
-                                        }
-                                    }
+                                        if root.journal-path != "": Rectangle {
+                                            width: 18px;
+                                            height: 18px;
+                                            border-radius: 3px;
+                                            background: clear-path.has-hover ? #ff5f5725 : transparent;
 
-                                    if root.journal-path != "": Rectangle {
-                                        width: 18px;
-                                        height: 18px;
-                                        border-radius: 3px;
-                                        background: clear-path.has-hover ? #ff5f5725 : transparent;
+                                            Text {
+                                                text: "✕";
+                                                color: #ff5f57;
+                                                font-size: 9px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
 
-                                        Text {
-                                            text: "✕";
-                                            color: #ff5f57;
-                                            font-size: 9px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
-
-                                        clear-path := TouchArea {
-                                            mouse-cursor: pointer;
-                                            clicked => {
-                                                root.journal-path = "";
+                                            clear-path := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.journal-path = "";
+                                                }
                                             }
                                         }
                                     }
@@ -716,7 +747,13 @@ export component SettingsWindow inherits Window {
 
                     close-btn := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.close-window(); }
+                        clicked => {
+                            if (root.is-recording-hotkey) {
+                                root.is-recording-hotkey = false;
+                                root.hotkey-recording-ended();
+                            }
+                            root.close-window();
+                        }
                     }
                 }
 
@@ -737,7 +774,13 @@ export component SettingsWindow inherits Window {
 
                     save-btn := TouchArea {
                         mouse-cursor: pointer;
-                        clicked => { root.save(); }
+                        clicked => {
+                            if (root.is-recording-hotkey) {
+                                root.is-recording-hotkey = false;
+                                root.hotkey-recording-ended();
+                            }
+                            root.save();
+                        }
                     }
                 }
             }

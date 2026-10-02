@@ -13,12 +13,12 @@ use crate::domain::state::AppState;
 use crate::infra::os::window::{
     center_window_top, drag_window, position_window_at, set_click_through, show_window,
 };
-use crate::ui::MainWindow;
 use crate::ui::mapper::{
     format_distance_ls, format_distance_ly, format_location, format_profit, format_ship_badge,
     format_unit_profit,
 };
 use crate::ui::settings::show_settings_window;
+use crate::ui::{MainWindow, SettingsWindow};
 
 fn lock_mutex<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     match m.lock() {
@@ -248,17 +248,17 @@ pub fn show_main_window(ctx: MainWindowContext) {
     // Register Global Hotkey
     let hotkey_win_weak = window.as_weak();
     let is_visible = Arc::new(Mutex::new(true));
-    let is_visible_clone = Arc::clone(&is_visible);
     let hotkey_str = {
         let cfg = lock_mutex(&config);
         cfg.general.hotkey.clone()
     };
 
-    let _ = hotkey.register(
-        &hotkey_str,
-        Box::new(move || {
-            let win_weak = hotkey_win_weak.clone();
-            let is_visible = Arc::clone(&is_visible_clone);
+    let toggle_overlay: Arc<dyn Fn() + Send + Sync + 'static> = {
+        let win_weak = hotkey_win_weak.clone();
+        let is_visible = Arc::clone(&is_visible);
+        Arc::new(move || {
+            let win_weak = win_weak.clone();
+            let is_visible = Arc::clone(&is_visible);
 
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(win) = win_weak.upgrade() {
@@ -273,6 +273,14 @@ pub fn show_main_window(ctx: MainWindowContext) {
                     }
                 }
             });
+        })
+    };
+
+    let _ = hotkey.register(
+        &hotkey_str,
+        Box::new({
+            let toggle = Arc::clone(&toggle_overlay);
+            move || toggle()
         }),
     );
 
@@ -341,20 +349,37 @@ pub fn show_main_window(ctx: MainWindowContext) {
         });
 
         // Open Settings callback
+        let active_settings_win: Arc<Mutex<Option<slint::Weak<SettingsWindow>>>> =
+            Arc::new(Mutex::new(None));
+
         win.on_open_settings({
             let config = Arc::clone(&config);
             let config_store = Arc::clone(&config_store);
             let state = Arc::clone(&state);
             let spansh = Arc::clone(&spansh);
+            let hotkey = Arc::clone(&hotkey);
+            let toggle_overlay = Arc::clone(&toggle_overlay);
+            let active_win = Arc::clone(&active_settings_win);
             let main_weak = win.as_weak();
             move || {
-                show_settings_window(
+                let mut lock = lock_mutex(&active_win);
+                if let Some(weak) = lock.as_ref()
+                    && let Some(win) = weak.upgrade()
+                {
+                    let _ = win.show();
+                    return;
+                }
+
+                let weak = show_settings_window(
                     Arc::clone(&config),
                     Arc::clone(&config_store),
                     Arc::clone(&state),
                     Arc::clone(&spansh),
+                    Arc::clone(&hotkey),
+                    Arc::clone(&toggle_overlay),
                     main_weak.clone(),
                 );
+                *lock = Some(weak);
             }
         });
 

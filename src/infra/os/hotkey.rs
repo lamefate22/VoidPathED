@@ -46,13 +46,13 @@ pub fn parse_hotkey(s: &str) -> Option<(HOT_KEY_MODIFIERS, u32)> {
 }
 
 pub struct OsHotkeyListener {
-    is_running: Arc<AtomicBool>,
+    active_listener: std::sync::Mutex<Option<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>>,
 }
 
 impl OsHotkeyListener {
     pub fn new() -> Self {
         Self {
-            is_running: Arc::new(AtomicBool::new(false)),
+            active_listener: std::sync::Mutex::new(None),
         }
     }
 }
@@ -70,7 +70,6 @@ impl HotkeyListener for OsHotkeyListener {
         callback: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Result<(), CoreError> {
         self.stop();
-        self.is_running.store(true, Ordering::SeqCst);
 
         #[cfg(target_os = "windows")]
         {
@@ -79,7 +78,8 @@ impl HotkeyListener for OsHotkeyListener {
                 DispatchMessageW, MSG, PM_REMOVE, PeekMessageW, TranslateMessage, WM_HOTKEY,
             };
 
-            let running_clone = Arc::clone(&self.is_running);
+            let stop_signal = Arc::new(AtomicBool::new(false));
+            let stop_clone = Arc::clone(&stop_signal);
             let callback = Arc::new(callback);
             let (modifiers, vk_key) = parse_hotkey(shortcut).unwrap_or_else(|| {
                 tracing::warn!(
@@ -94,7 +94,7 @@ impl HotkeyListener for OsHotkeyListener {
 
             let shortcut_display = shortcut.to_string();
 
-            std::thread::spawn(move || unsafe {
+            let handle = std::thread::spawn(move || unsafe {
                 const HOTKEY_ID: i32 = 0x5601;
 
                 if let Err(e) = RegisterHotKey(None, HOTKEY_ID, modifiers, vk_key) {
@@ -112,7 +112,7 @@ impl HotkeyListener for OsHotkeyListener {
                 );
 
                 let mut msg = MSG::default();
-                while running_clone.load(Ordering::SeqCst) {
+                while !stop_clone.load(Ordering::SeqCst) {
                     while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
                         if msg.message == WM_HOTKEY && msg.wParam.0 == HOTKEY_ID as usize {
                             tracing::info!("Global hotkey triggered -> toggling overlay");
@@ -127,6 +127,10 @@ impl HotkeyListener for OsHotkeyListener {
                 let _ = UnregisterHotKey(None, HOTKEY_ID);
                 tracing::info!("Global hotkey unregistered");
             });
+
+            if let Ok(mut lock) = self.active_listener.lock() {
+                *lock = Some((stop_signal, handle));
+            }
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -139,6 +143,11 @@ impl HotkeyListener for OsHotkeyListener {
     }
 
     fn stop(&self) {
-        self.is_running.store(false, Ordering::SeqCst);
+        if let Ok(mut lock) = self.active_listener.lock()
+            && let Some((stop_signal, handle)) = lock.take()
+        {
+            stop_signal.store(true, Ordering::SeqCst);
+            let _ = handle.join();
+        }
     }
 }
