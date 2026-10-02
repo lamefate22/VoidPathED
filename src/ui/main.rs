@@ -15,7 +15,8 @@ use crate::infra::os::window::{
 };
 use crate::ui::MainWindow;
 use crate::ui::mapper::{
-    format_distance_ls, format_distance_ly, format_location, format_profit, format_unit_profit,
+    format_distance_ls, format_distance_ly, format_location, format_profit, format_ship_badge,
+    format_unit_profit,
 };
 use crate::ui::settings::show_settings_window;
 
@@ -34,10 +35,7 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
     win.set_is_click_through(state.click_through);
 
     if let Some(ship) = &state.current_ship {
-        let text = format!(
-            "{} ({}t | {:.1} LY)",
-            ship.ship_name, ship.cargo_capacity, ship.max_jump_range
-        );
+        let text = format_ship_badge(&ship.ship_name, &ship.ship_type, ship.max_jump_range);
         win.set_ship_info_text(text.into());
     } else {
         win.set_ship_info_text("".into());

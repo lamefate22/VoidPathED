@@ -41,6 +41,42 @@ pub fn format_location(system: &str, station: &str) -> String {
     }
 }
 
+pub fn capitalize_words(s: &str) -> String {
+    s.split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn format_ship_badge(name: &str, ship_type: &str, max_jump_range: f32) -> String {
+    let name_trimmed = name.trim();
+    let cap_type = capitalize_words(ship_type);
+    let display_type = if cap_type.is_empty() {
+        "Ship".to_string()
+    } else {
+        cap_type
+    };
+
+    let display_name =
+        if name_trimmed.is_empty() || name_trimmed.eq_ignore_ascii_case(&display_type) {
+            display_type
+        } else {
+            format!("\"{}\" ({})", name_trimmed, display_type)
+        };
+
+    if max_jump_range > 0.0 {
+        format!("{} • {:.1} LY", display_name, max_jump_range)
+    } else {
+        display_name
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,5 +100,21 @@ mod tests {
     fn test_format_location() {
         assert_eq!(format_location("Sol", "Galileo"), "Sol / Galileo");
         assert_eq!(format_location("Sol", ""), "Sol");
+    }
+
+    #[test]
+    fn test_format_ship_badge() {
+        assert_eq!(
+            format_ship_badge("  ", "mandalay", 38.929),
+            "Mandalay • 38.9 LY"
+        );
+        assert_eq!(
+            format_ship_badge("Runner", "python", 32.5),
+            "\"Runner\" (Python) • 32.5 LY"
+        );
+        assert_eq!(
+            format_ship_badge("Python", "python", 32.5),
+            "Python • 32.5 LY"
+        );
     }
 }
