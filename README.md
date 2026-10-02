@@ -2,21 +2,17 @@
 
 VoidPath ED is a trading overlay written entirely in Rust. It simplifies working with Elite Dangerous trade routes, eliminating the need to constantly check your browser.
 
-![Alpha](https://img.shields.io/badge/status-alpha-orange)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![Rust](https://img.shields.io/badge/rust-1.95+-orange)
 
-> Work in progress. Expect bugs, incomplete UI, and breaking changes between releases.
+## Features Available in v1.0
 
-## ⚠️ Alpha
-
-The project is currently under active development; many necessary features are not yet ready.
-
-## Features Already Available
-
-- Configuration support is partially implemented
-- The application's GUI is partially complete
-- Full support for the spansh.co.uk API
+- Real-time Elite Dangerous Journal & Status.json watcher
+- Dynamic ship loadout sync (cargo capacity, jump range, landing pad size)
+- Spansh.co.uk multi-hop trade route calculation with local caching
+- Compact, non-intrusive HUD overlay with customizable global hotkey
+- Symmetrical multi-line navigation card with one-click clipboard copying
 
 ## Requirements
 

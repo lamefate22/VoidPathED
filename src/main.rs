@@ -12,7 +12,7 @@ use voidpath_rs::ui::{show_init_window, show_main_window};
 #[tokio::main]
 async fn main() {
     let _guard = init_logger();
-    tracing::info!("Starting VoidPath ED...");
+    tracing::info!("Starting VoidPath ED v1.0...");
 
     // 1. Initialize Infrastructure Adapters (Dependency Injection)
     let spansh = Arc::new(SpanshHttpClient::new());
