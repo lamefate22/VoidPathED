@@ -266,6 +266,25 @@ pub fn show_settings_window(
                     });
                 }
             });
+
+            // Hotkey recording callback
+            win.on_hotkey_key_pressed({
+                let w = win.as_weak();
+                move |text, ctrl, alt, shift, win_mod| {
+                    if let Some(win) = w.upgrade() {
+                        if text == "\u{1b}" {
+                            win.set_is_recording_hotkey(false);
+                            return;
+                        }
+                        if let Some(shortcut) = crate::ui::mapper::format_hotkey_from_event(
+                            &text, ctrl, alt, shift, win_mod,
+                        ) {
+                            win.set_hotkey_str(shortcut.into());
+                            win.set_is_recording_hotkey(false);
+                        }
+                    }
+                }
+            });
         },
         460,
         580,

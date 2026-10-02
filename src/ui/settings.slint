@@ -115,6 +115,7 @@ export component SettingsWindow inherits Window {
     callback close-window();
     callback save();
     callback browse-journal-path();
+    callback hotkey-key-pressed(string, bool, bool, bool, bool);
 
     in property <[StationSuggestion]> station-suggestions: [];
     in-out property <string> starting-point: "Sol / Galileo";
@@ -146,7 +147,25 @@ export component SettingsWindow inherits Window {
     in-out property <bool> auto-copy-system: true;
     in-out property <bool> sound-enabled: true;
     in-out property <string> hotkey-str: "Ctrl+Shift+V";
+    in-out property <bool> is-recording-hotkey: false;
     in-out property <string> journal-path: "";
+
+    // Hotkey recording FocusScope
+    hotkey-focus := FocusScope {
+        key-pressed(event) => {
+            if (root.is-recording-hotkey) {
+                root.hotkey-key-pressed(
+                    event.text,
+                    event.modifiers.control,
+                    event.modifiers.alt,
+                    event.modifiers.shift,
+                    event.modifiers.meta
+                );
+                return accept;
+            }
+            reject
+        }
+    }
 
     Rectangle {
         background: #101115;
@@ -313,7 +332,6 @@ export component SettingsWindow inherits Window {
                                         text <=> root.starting-point;
                                         placeholder-text: "Type station or system...";
                                         font-size: 11px;
-                                        height: 22px;
                                         width: 200px;
                                     }
                                 }
@@ -484,13 +502,91 @@ export component SettingsWindow inherits Window {
                             label: "Sound effects (Chimes)";
                             checked <=> root.sound-enabled;
                         }
-                        SettingInputRow {
-                            label: "Global Hotkey (Toggle Overlay)";
-                            text <=> root.hotkey-str;
-                            placeholder: "Ctrl+Shift+V";
+
+                        // Hotkey Recording Row
+                        Rectangle {
+                            border-color: root.is-recording-hotkey ? #5DCAA580 : #FFFFFF0D;
+                            background: root.is-recording-hotkey ? #5DCAA510 : #ffffff05;
+                            border-width: root.is-recording-hotkey ? 1px : 0.5px;
+                            border-radius: 5px;
+                            height: 32px;
+
+                            HorizontalLayout {
+                                alignment: space-between;
+                                padding-right: 10px;
+                                padding-left: 10px;
+
+                                Text {
+                                    vertical-alignment: center;
+                                    color: #FFFFFF99;
+                                    text: "Global Hotkey (Toggle Overlay)";
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                }
+
+                                HorizontalLayout {
+                                    alignment: center;
+                                    spacing: 5px;
+
+                                    Rectangle {
+                                        background: root.is-recording-hotkey ? #5DCAA525 : (hotkey-btn.has-hover ? #ffffff15 : #ffffff0a);
+                                        border-color: root.is-recording-hotkey ? #5DCAA5 : #ffffff18;
+                                        border-width: 0.5px;
+                                        border-radius: 4px;
+                                        height: 22px;
+
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            alignment: center;
+
+                                            Text {
+                                                text: root.is-recording-hotkey ? "Press shortcut..." : root.hotkey-str;
+                                                color: root.is-recording-hotkey ? #5DCAA5 : #FFFFFF;
+                                                font-size: 11px;
+                                                font-family: "Inter";
+                                                font-weight: root.is-recording-hotkey ? 600 : 500;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        hotkey-btn := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.is-recording-hotkey = !root.is-recording-hotkey;
+                                                if (root.is-recording-hotkey) {
+                                                    hotkey-focus.focus();
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if root.hotkey-str != "Ctrl+Shift+V" && !root.is-recording-hotkey: Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        border-radius: 3px;
+                                        background: reset-hk.has-hover ? #ffffff15 : transparent;
+
+                                        Text {
+                                            text: "↺";
+                                            color: #FFFFFF60;
+                                            font-size: 11px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+
+                                        reset-hk := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.hotkey-str = "Ctrl+Shift+V";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        // Custom Journal Folder
+                        // Custom Journal Folder (No focus-stealing LineEdit)
                         Rectangle {
                             border-color: #FFFFFF0D;
                             background: #ffffff05;
@@ -515,12 +611,27 @@ export component SettingsWindow inherits Window {
                                     alignment: center;
                                     spacing: 5px;
 
-                                    LineEdit {
-                                        text <=> root.journal-path;
-                                        placeholder-text: "Auto-detect default";
-                                        font-size: 11px;
-                                        width: 130px;
+                                    Rectangle {
+                                        background: #ffffff08;
+                                        border-color: #ffffff10;
+                                        border-width: 0.5px;
+                                        border-radius: 4px;
                                         height: 22px;
+                                        max-width: 170px;
+
+                                        HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+
+                                            Text {
+                                                text: root.journal-path != "" ? root.journal-path : "Default (Auto-detect)";
+                                                color: root.journal-path != "" ? #FFFFFF : #FFFFFF50;
+                                                font-size: 10px;
+                                                font-family: "Inter";
+                                                overflow: elide;
+                                                vertical-alignment: center;
+                                            }
+                                        }
                                     }
 
                                     Rectangle {
@@ -544,6 +655,28 @@ export component SettingsWindow inherits Window {
                                         browse-btn := TouchArea {
                                             mouse-cursor: pointer;
                                             clicked => { root.browse-journal-path(); }
+                                        }
+                                    }
+
+                                    if root.journal-path != "": Rectangle {
+                                        width: 18px;
+                                        height: 18px;
+                                        border-radius: 3px;
+                                        background: clear-path.has-hover ? #ff5f5725 : transparent;
+
+                                        Text {
+                                            text: "✕";
+                                            color: #ff5f57;
+                                            font-size: 9px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+
+                                        clear-path := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.journal-path = "";
+                                            }
                                         }
                                     }
                                 }

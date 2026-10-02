@@ -77,9 +77,93 @@ pub fn format_ship_badge(name: &str, ship_type: &str, max_jump_range: f32) -> St
     }
 }
 
+pub fn format_hotkey_from_event(
+    text: &str,
+    ctrl: bool,
+    alt: bool,
+    shift: bool,
+    win: bool,
+) -> Option<String> {
+    if text.is_empty() {
+        return None;
+    }
+
+    let ch = text.chars().next()?;
+
+    // Escape or modifiers alone
+    if ch == '\u{1b}' || ch == '\u{10}' || ch == '\u{11}' || ch == '\u{12}' || ch == '\u{13}' {
+        return None;
+    }
+
+    let key_name = match ch {
+        c if c.is_ascii_alphanumeric() => c.to_ascii_uppercase().to_string(),
+        ' ' => "Space".to_string(),
+        '\t' => "Tab".to_string(),
+        '\u{f700}' => "Up".to_string(),
+        '\u{f701}' => "Down".to_string(),
+        '\u{f702}' => "Left".to_string(),
+        '\u{f703}' => "Right".to_string(),
+        '\u{f704}' => "F1".to_string(),
+        '\u{f705}' => "F2".to_string(),
+        '\u{f706}' => "F3".to_string(),
+        '\u{f707}' => "F4".to_string(),
+        '\u{f708}' => "F5".to_string(),
+        '\u{f709}' => "F6".to_string(),
+        '\u{f70a}' => "F7".to_string(),
+        '\u{f70b}' => "F8".to_string(),
+        '\u{f70c}' => "F9".to_string(),
+        '\u{f70d}' => "F10".to_string(),
+        '\u{f70e}' => "F11".to_string(),
+        '\u{f70f}' => "F12".to_string(),
+        _ => return None,
+    };
+
+    let mut parts = Vec::new();
+    if ctrl {
+        parts.push("Ctrl");
+    }
+    if alt {
+        parts.push("Alt");
+    }
+    if shift {
+        parts.push("Shift");
+    }
+    if win {
+        parts.push("Win");
+    }
+    parts.push(&key_name);
+
+    Some(parts.join("+"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_hotkey_from_event() {
+        assert_eq!(
+            format_hotkey_from_event("v", true, false, true, false),
+            Some("Ctrl+Shift+V".to_string())
+        );
+        assert_eq!(
+            format_hotkey_from_event("\u{f70c}", false, false, false, false),
+            Some("F9".to_string())
+        );
+        assert_eq!(
+            format_hotkey_from_event("\u{f70d}", false, true, false, false),
+            Some("Alt+F10".to_string())
+        );
+        // Modifiers alone or Esc should return None
+        assert_eq!(
+            format_hotkey_from_event("\u{11}", true, false, false, false),
+            None
+        );
+        assert_eq!(
+            format_hotkey_from_event("\u{1b}", false, false, false, false),
+            None
+        );
+    }
 
     #[test]
     fn test_format_number() {
