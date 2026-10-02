@@ -4,7 +4,7 @@ export component MainWindow inherits Window {
     always-on-top: true;
     no-frame: true;
     height: 94px;
-    width: 650px;
+    width: 680px;
 
     // View States
     in property <bool> is-route: false;
@@ -380,6 +380,24 @@ export component MainWindow inherits Window {
                                 }
                             }
 
+                            if root.source-station != "": Text {
+                                text: root.source-station;
+                                color: #FFFFFF70;
+                                font-size: 11px;
+                                font-family: "Inter";
+                                font-weight: 500;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+
+                            if root.source-station != "": Text {
+                                text: "→";
+                                color: #5DCAA580;
+                                font-size: 11px;
+                                font-family: "Inter";
+                                vertical-alignment: center;
+                            }
+
                             Text {
                                 text: root.dest-system;
                                 color: #FFFFFF;
@@ -523,8 +541,8 @@ export component MainWindow inherits Window {
                             spacing: 6px;
                             alignment: start;
 
-                            Text {
-                                text: root.commodity-amount + " " + root.commodity-name;
+                            if root.commodity-name != "": Text {
+                                text: "Buy: " + root.commodity-amount + " " + root.commodity-name + (root.buy-price != "" && root.buy-price != "0 CR" && root.buy-price != "0 CR/t" ? " @ " + root.buy-price : "");
                                 color: #60A5FA;
                                 font-size: 10px;
                                 font-family: "Inter";
@@ -558,10 +576,11 @@ export component MainWindow inherits Window {
                             }
 
                             if root.dest-dist != "": Text {
-                                text: "• arr: " + root.dest-dist;
-                                color: #FFFFFF50;
+                                text: "• station: " + root.dest-dist;
+                                color: #CBD5E1;
                                 font-size: 10px;
                                 font-family: "Inter";
+                                font-weight: 500;
                                 vertical-alignment: center;
                             }
                         }

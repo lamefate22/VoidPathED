@@ -102,11 +102,27 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
             if let Some(comm) = step.commodities.first() {
                 win.set_commodity_name(comm.name.clone().into());
                 win.set_commodity_amount(format!("{} t", comm.amount).into());
-                win.set_buy_price(format_profit(comm.source_commodity.buy_price as u64).into());
+                win.set_buy_price(
+                    format!(
+                        "{}/t",
+                        format_profit(comm.source_commodity.buy_price as u64)
+                    )
+                    .into(),
+                );
                 win.set_sell_price(
-                    format_profit(comm.destination_commodity.sell_price as u64).into(),
+                    format!(
+                        "{}/t",
+                        format_profit(comm.destination_commodity.sell_price as u64)
+                    )
+                    .into(),
                 );
                 win.set_unit_profit(format_unit_profit(comm.profit).into());
+            } else {
+                win.set_commodity_name("".into());
+                win.set_commodity_amount("".into());
+                win.set_buy_price("".into());
+                win.set_sell_price("".into());
+                win.set_unit_profit("".into());
             }
         }
         return;
