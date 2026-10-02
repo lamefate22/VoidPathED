@@ -694,12 +694,11 @@ export component SettingsWindow inherits Window {
                                             border-radius: 3px;
                                             background: clear-path.has-hover ? #ff5f5725 : transparent;
 
-                                            Text {
-                                                text: "✕";
-                                                color: #ff5f57;
-                                                font-size: 9px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
+                                            Image {
+                                                source: @image-url("assets/close.svg");
+                                                colorize: clear-path.has-hover ? #ff5f57 : #FFFFFF50;
+                                                height: 9px;
+                                                width: 9px;
                                             }
 
                                             clear-path := TouchArea {
