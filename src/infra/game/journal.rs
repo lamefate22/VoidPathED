@@ -147,7 +147,8 @@ impl GameJournalWatcher {
                 })
             }
             "Loadout" => {
-                let ship_type = v.get("Ship")?.as_str()?.to_string();
+                let raw_ship = v.get("Ship")?.as_str()?;
+                let ship_type = crate::domain::event::canonical_ship_name(raw_ship);
                 let ship_name = v
                     .get("ShipName")
                     .and_then(|s| s.as_str())
@@ -164,7 +165,7 @@ impl GameJournalWatcher {
                     .get("MaxJumpRange")
                     .and_then(|j| j.as_f64())
                     .unwrap_or(0.0) as f32;
-                let pad_size = LandingPadSize::from_ship_type(&ship_type);
+                let pad_size = LandingPadSize::from_ship_type(raw_ship);
                 Some(GameEvent::Loadout(ShipLoadout {
                     ship_type,
                     ship_name,

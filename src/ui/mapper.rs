@@ -56,11 +56,11 @@ pub fn capitalize_words(s: &str) -> String {
 
 pub fn format_ship_badge(name: &str, ship_type: &str, max_jump_range: f32) -> String {
     let name_trimmed = name.trim();
-    let cap_type = capitalize_words(ship_type);
-    let display_type = if cap_type.is_empty() {
+    let canonical = crate::domain::event::canonical_ship_name(ship_type);
+    let display_type = if canonical.is_empty() {
         "Ship".to_string()
     } else {
-        cap_type
+        canonical
     };
 
     let display_name =
@@ -199,6 +199,10 @@ mod tests {
         assert_eq!(
             format_ship_badge("Python", "python", 32.5),
             "Python • 32.5 LY"
+        );
+        assert_eq!(
+            format_ship_badge("", "panthermkii", 23.98),
+            "Panther Clipper Mk II • 24.0 LY"
         );
     }
 }

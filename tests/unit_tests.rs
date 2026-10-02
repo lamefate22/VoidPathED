@@ -377,6 +377,14 @@ fn test_ship_loadout_parsing_and_pad_sizes() {
         LandingPadSize::Small
     );
     assert_eq!(
+        LandingPadSize::from_ship_type("panthermkii"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("empire_trader"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
         LandingPadSize::from_ship_type("hauler"),
         LandingPadSize::Small
     );
@@ -393,7 +401,7 @@ fn test_ship_loadout_parsing_and_pad_sizes() {
 
     let event = GameJournalWatcher::parse_journal_line(loadout_line).expect("Should parse Loadout");
     if let GameEvent::Loadout(loadout) = event {
-        assert_eq!(loadout.ship_type, "type9");
+        assert_eq!(loadout.ship_type, "Type-9 Heavy");
         assert_eq!(loadout.ship_name, "TITAN EXPRESS");
         assert_eq!(loadout.ship_ident, "TX-99");
         assert_eq!(loadout.cargo_capacity, 752);

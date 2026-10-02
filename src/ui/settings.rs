@@ -67,9 +67,15 @@ pub fn show_settings_window(
 
         let st = lock_mutex(&state);
         if let Some(ship) = &st.current_ship {
+            let name = ship.ship_name.trim();
+            let label = if name.is_empty() || name.eq_ignore_ascii_case(&ship.ship_type) {
+                ship.ship_type.clone()
+            } else {
+                format!("\"{}\" ({})", name, ship.ship_type)
+            };
             let info = format!(
                 "{} ({}t | {:.1} LY | {:?})",
-                ship.ship_name, ship.cargo_capacity, ship.max_jump_range, ship.pad_size
+                label, ship.cargo_capacity, ship.max_jump_range, ship.pad_size
             );
             window.set_detected_ship_info(info.into());
         }
