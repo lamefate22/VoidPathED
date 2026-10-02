@@ -99,7 +99,12 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
             win.set_dest_dist(format_distance_ls(step.destination.distance_to_arrival).into());
 
             // Commodity
-            if let Some(comm) = step.commodities.first() {
+            let comm_count = step.commodities.len();
+            win.set_commodity_count(comm_count as i32);
+            if comm_count > 0 {
+                let comm_idx = state.current_commodity_index % comm_count;
+                win.set_commodity_index((comm_idx + 1) as i32);
+                let comm = &step.commodities[comm_idx];
                 win.set_commodity_name(comm.name.clone().into());
                 win.set_commodity_amount(format!("{} t", comm.amount).into());
                 win.set_buy_price(
@@ -117,18 +122,30 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
                     .into(),
                 );
                 win.set_unit_profit(format_unit_profit(comm.profit).into());
+
+                let is_bought = state.step_commodities_bought.contains(&comm.name);
+                let is_sold = state.step_commodities_sold.contains(&comm.name);
+                win.set_is_commodity_bought(is_bought);
+                win.set_is_commodity_sold(is_sold);
             } else {
+                win.set_commodity_index(1);
                 win.set_commodity_name("".into());
                 win.set_commodity_amount("".into());
                 win.set_buy_price("".into());
                 win.set_sell_price("".into());
                 win.set_unit_profit("".into());
+                win.set_is_commodity_bought(false);
+                win.set_is_commodity_sold(false);
             }
         }
         return;
     }
 
     win.set_is_route(false);
+    win.set_commodity_count(0);
+    win.set_commodity_index(1);
+    win.set_is_commodity_bought(false);
+    win.set_is_commodity_sold(false);
 }
 
 pub struct MainWindowContext {
@@ -508,6 +525,21 @@ pub fn show_main_window(ctx: MainWindowContext) {
                 let mut st = lock_mutex(&state);
                 ActionHandler::clear_route(&mut st);
                 trade_coord.clear_cached_route();
+                let cfg = lock_mutex(&config);
+                if let Some(win) = w.upgrade() {
+                    update_main_ui(&win, &st, &cfg);
+                }
+            }
+        });
+
+        // Cycle Commodity callback
+        win.on_cycle_commodity({
+            let state = Arc::clone(&state);
+            let config = Arc::clone(&config);
+            let w = win.as_weak();
+            move || {
+                let mut st = lock_mutex(&state);
+                st.cycle_commodity();
                 let cfg = lock_mutex(&config);
                 if let Some(win) = w.upgrade() {
                     update_main_ui(&win, &st, &cfg);

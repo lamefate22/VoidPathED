@@ -464,3 +464,165 @@ fn test_cargo_parsing_and_tracker_sync() {
     assert_eq!(ship.cargo_capacity, 280);
     assert_eq!(ship.pad_size, LandingPadSize::Medium);
 }
+
+#[test]
+fn test_multi_commodity_flow_and_tracking() {
+    let mut state = AppState::new();
+
+    let step1 = RouteStep {
+        distance: 12.5,
+        total_profit: 2_500_000,
+        cumulative_profit: 2_500_000,
+        source: SystemInfo {
+            system: "Sol".to_string(),
+            station: "Galileo".to_string(),
+            distance_to_arrival: Some(150),
+        },
+        destination: SystemInfo {
+            system: "Alpha Centauri".to_string(),
+            station: "Hutton Orbital".to_string(),
+            distance_to_arrival: Some(500),
+        },
+        commodities: vec![
+            Commodity {
+                name: "Gold".to_string(),
+                amount: 400,
+                profit: 4000,
+                total_profit: 1_600_000,
+                source_commodity: PriceInfo {
+                    buy_price: 45000,
+                    sell_price: 0,
+                    supply: 1000,
+                    demand: 0,
+                },
+                destination_commodity: PriceInfo {
+                    buy_price: 0,
+                    sell_price: 49000,
+                    supply: 0,
+                    demand: 1000,
+                },
+            },
+            Commodity {
+                name: "Silver".to_string(),
+                amount: 320,
+                profit: 2812,
+                total_profit: 900_000,
+                source_commodity: PriceInfo {
+                    buy_price: 30000,
+                    sell_price: 0,
+                    supply: 1000,
+                    demand: 0,
+                },
+                destination_commodity: PriceInfo {
+                    buy_price: 0,
+                    sell_price: 32812,
+                    supply: 0,
+                    demand: 1000,
+                },
+            },
+        ],
+    };
+
+    let step2 = RouteStep {
+        distance: 8.0,
+        total_profit: 1_200_000,
+        cumulative_profit: 3_700_000,
+        source: SystemInfo {
+            system: "Alpha Centauri".to_string(),
+            station: "Hutton Orbital".to_string(),
+            distance_to_arrival: Some(500),
+        },
+        destination: SystemInfo {
+            system: "Barnard's Star".to_string(),
+            station: "Boston Base".to_string(),
+            distance_to_arrival: Some(250),
+        },
+        commodities: vec![],
+    };
+
+    state.set_route(vec![step1, step2]);
+    assert_eq!(state.current_step_index, 0);
+    assert_eq!(state.current_commodity_index, 0);
+    assert!(state.step_commodities_bought.is_empty());
+    assert!(state.step_commodities_sold.is_empty());
+
+    // 1. Commodity cycling
+    state.cycle_commodity();
+    assert_eq!(state.current_commodity_index, 1);
+    state.cycle_commodity();
+    assert_eq!(state.current_commodity_index, 0);
+
+    // 2. Buying the first commodity (Gold)
+    let buy_gold = GameEvent::MarketBuy {
+        commodity: "Gold".to_string(),
+        count: 400,
+    };
+    let outcome = GameTracker::handle_event(&mut state, &buy_gold, true);
+    assert!(outcome.changed);
+    assert!(!outcome.step_advanced);
+    assert!(state.step_commodities_bought.contains("Gold"));
+    assert_eq!(
+        state.current_commodity_index, 1,
+        "Should automatically switch to the next unbought commodity (Silver)"
+    );
+
+    // 3. Buying the second commodity (Silver)
+    let buy_silver = GameEvent::MarketBuy {
+        commodity: "Silver".to_string(),
+        count: 320,
+    };
+    let outcome = GameTracker::handle_event(&mut state, &buy_silver, true);
+    assert!(outcome.changed);
+    assert!(!outcome.step_advanced);
+    assert!(state.step_commodities_bought.contains("Silver"));
+
+    // 4. Arrive and dock at destination station
+    state.current_system = "Alpha Centauri".to_string();
+    let dock_event = GameEvent::Docked {
+        system: "Alpha Centauri".to_string(),
+        station: "Hutton Orbital".to_string(),
+    };
+    let outcome = GameTracker::handle_event(&mut state, &dock_event, true);
+    assert!(outcome.changed);
+    assert!(
+        !outcome.step_advanced,
+        "Docking should NOT auto-advance when commodities are loaded and unsold"
+    );
+    assert_eq!(state.current_step_index, 0);
+
+    // 5. Sell first commodity (Gold)
+    let sell_gold = GameEvent::MarketSell {
+        commodity: "Gold".to_string(),
+        count: 400,
+        profit: Some(1_600_000),
+    };
+    let outcome = GameTracker::handle_event(&mut state, &sell_gold, true);
+    assert!(outcome.changed);
+    assert!(
+        !outcome.step_advanced,
+        "Selling 1 of 2 commodities should NOT auto-advance yet"
+    );
+    assert_eq!(state.current_step_index, 0);
+    assert!(state.step_commodities_sold.contains("Gold"));
+    assert_eq!(
+        state.current_commodity_index, 1,
+        "Should automatically switch to the next unsold commodity (Silver)"
+    );
+
+    // 6. Sell second commodity (Silver) -> All sold, should auto-advance!
+    let sell_silver = GameEvent::MarketSell {
+        commodity: "Silver".to_string(),
+        count: 320,
+        profit: Some(900_000),
+    };
+    let outcome = GameTracker::handle_event(&mut state, &sell_silver, true);
+    assert!(outcome.changed);
+    assert!(
+        outcome.step_advanced,
+        "Selling the final commodity SHOULD trigger auto-advance to step 1"
+    );
+    assert_eq!(state.current_step_index, 1);
+    assert_eq!(state.current_commodity_index, 0);
+    assert!(state.step_commodities_bought.is_empty());
+    assert!(state.step_commodities_sold.is_empty());
+}

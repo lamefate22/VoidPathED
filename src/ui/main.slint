@@ -48,6 +48,12 @@ export component MainWindow inherits Window {
     in property <string> cargo-info-text: "";
     in property <bool> is-click-through: false;
 
+    // Multi-commodity tracking
+    in property <int> commodity-count: 1;
+    in property <int> commodity-index: 1;
+    in property <bool> is-commodity-bought: false;
+    in property <bool> is-commodity-sold: false;
+
     // Callbacks
     callback close-window();
     callback search-route();
@@ -58,12 +64,21 @@ export component MainWindow inherits Window {
     callback clear-route();
     callback window-drag-started();
     callback toggle-click-through();
+    callback cycle-commodity();
 
     Timer {
         interval: 16ms;
         running: is-searching-route;
         triggered => {
             search-spinner-angle = mod(search-spinner-angle + 6, 360);
+        }
+    }
+
+    Timer {
+        interval: 4000ms;
+        running: is-route && commodity-count > 1;
+        triggered => {
+            root.cycle-commodity();
         }
     }
 
@@ -541,14 +556,55 @@ export component MainWindow inherits Window {
                             spacing: 6px;
                             alignment: start;
 
-                            if root.commodity-name != "": Text {
-                                text: "Buy: " + root.commodity-amount + " " + root.commodity-name + (root.buy-price != "" && root.buy-price != "0 CR" && root.buy-price != "0 CR/t" ? " @ " + root.buy-price : "");
-                                color: #60A5FA;
-                                font-size: 10px;
-                                font-family: "Inter";
-                                font-weight: 500;
-                                vertical-alignment: center;
-                                overflow: elide;
+                            if root.commodity-name != "": Rectangle {
+                                background: comm-touch.has-hover && root.commodity-count > 1 ? #ffffff10 : transparent;
+                                border-radius: 3px;
+
+                                HorizontalLayout {
+                                    spacing: 4px;
+
+                                    if root.commodity-count > 1: VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            background: #ffffff14;
+                                            border-radius: 2px;
+                                            height: 14px;
+                                            HorizontalLayout {
+                                                padding-left: 3px;
+                                                padding-right: 3px;
+                                                Text {
+                                                    text: root.commodity-index + "/" + root.commodity-count;
+                                                    color: #FFFFFFB0;
+                                                    font-size: 9px;
+                                                    font-family: "Inter";
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        text: (root.is-commodity-sold ? "✓ Sold: " : (root.is-commodity-bought ? "✓ Sell: " : "Buy: "))
+                                            + root.commodity-amount + " " + root.commodity-name
+                                            + (root.is-commodity-sold ? "" : (root.is-commodity-bought ? (root.sell-price != "" && root.sell-price != "0 CR" && root.sell-price != "0 CR/t" ? " @ " + root.sell-price : "") : (root.buy-price != "" && root.buy-price != "0 CR" && root.buy-price != "0 CR/t" ? " @ " + root.buy-price : "")));
+                                        color: root.is-commodity-sold ? #5DCAA580 : (root.is-commodity-bought ? #34D399 : #60A5FA);
+                                        font-size: 10px;
+                                        font-family: "Inter";
+                                        font-weight: 500;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                comm-touch := TouchArea {
+                                    mouse-cursor: root.commodity-count > 1 ? pointer : default;
+                                    clicked => {
+                                        if (root.commodity-count > 1) {
+                                            root.cycle-commodity();
+                                        }
+                                    }
+                                }
                             }
 
                             Text {

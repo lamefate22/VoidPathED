@@ -66,12 +66,42 @@ impl GameTracker {
                     && step.destination.system.eq_ignore_ascii_case(system)
                     && step.destination.station.eq_ignore_ascii_case(station)
                 {
-                    tracing::info!(
-                        "Route auto-advance: arrived at target {} / {}",
-                        system,
-                        station
-                    );
-                    advanced = state.next_step();
+                    // Check if player is carrying any unsold target commodities
+                    let has_unsold_cargo = step.commodities.iter().any(|c| {
+                        let is_sold = state.step_commodities_sold.contains(&c.name);
+                        if is_sold {
+                            return false;
+                        }
+
+                        let was_bought = state.step_commodities_bought.contains(&c.name);
+                        let in_inventory = state.current_cargo.as_ref().map(|cargo| {
+                            cargo.items.iter().any(|item| {
+                                item.name.eq_ignore_ascii_case(&c.name)
+                                    || item
+                                        .name_localised
+                                        .as_deref()
+                                        .map(|l| l.eq_ignore_ascii_case(&c.name))
+                                        .unwrap_or(false)
+                            })
+                        });
+
+                        was_bought || in_inventory == Some(true)
+                    });
+
+                    if has_unsold_cargo {
+                        tracing::info!(
+                            "Docked at destination {} / {}, waiting for commodity sale",
+                            system,
+                            station
+                        );
+                    } else {
+                        tracing::info!(
+                            "Route auto-advance: arrived at target {} / {}",
+                            system,
+                            station
+                        );
+                        advanced = state.next_step();
+                    }
                 }
                 EventOutcome {
                     changed: true,
@@ -88,34 +118,73 @@ impl GameTracker {
                     ship_updated: false,
                 }
             }
-            GameEvent::MarketSell { commodity, .. } => {
-                if auto_advance
-                    && let Some(step) = state.current_step()
-                    && step
-                        .destination
-                        .system
-                        .eq_ignore_ascii_case(&state.current_system)
-                {
-                    let is_matching_commodity = step
-                        .commodities
-                        .iter()
-                        .any(|c| c.name.eq_ignore_ascii_case(commodity));
+            GameEvent::MarketSell {
+                commodity, count, ..
+            } => {
+                let mut advanced = false;
+                let mut changed = false;
 
-                    if is_matching_commodity {
-                        tracing::info!(
-                            "Route auto-advance: sold target commodity '{}' at {}",
-                            commodity,
-                            state.current_system
-                        );
-                        let advanced = state.next_step();
-                        return EventOutcome {
-                            changed: true,
-                            step_advanced: advanced,
-                            ship_updated: false,
-                        };
+                let matching_comm = state.current_step().and_then(|step| {
+                    step.commodities
+                        .iter()
+                        .find(|c| c.name.eq_ignore_ascii_case(commodity))
+                        .map(|c| c.name.clone())
+                });
+
+                if let Some(comm_name) = matching_comm {
+                    state.step_commodities_sold.insert(comm_name);
+                    tracing::info!(
+                        "Sold target commodity '{}' ({}t) at {}",
+                        commodity,
+                        count,
+                        state.current_system
+                    );
+                    changed = true;
+
+                    // Switch to the next unsold commodity if available
+                    let next_unsold_idx = state.current_step().and_then(|step| {
+                        step.commodities
+                            .iter()
+                            .enumerate()
+                            .find(|(_, c)| !state.step_commodities_sold.contains(&c.name))
+                            .map(|(idx, _)| idx)
+                    });
+                    if let Some(idx) = next_unsold_idx {
+                        state.current_commodity_index = idx;
                     }
                 }
-                EventOutcome::default()
+
+                if auto_advance {
+                    let should_advance = state
+                        .current_step()
+                        .map(|step| {
+                            let is_at_dest = step
+                                .destination
+                                .system
+                                .eq_ignore_ascii_case(&state.current_system);
+                            let all_sold = !step.commodities.is_empty()
+                                && step
+                                    .commodities
+                                    .iter()
+                                    .all(|c| state.step_commodities_sold.contains(&c.name));
+                            is_at_dest && all_sold
+                        })
+                        .unwrap_or(false);
+
+                    if should_advance {
+                        tracing::info!(
+                            "Route auto-advance: all target commodities sold for step {} -> advancing",
+                            state.current_step_index + 1
+                        );
+                        advanced = state.next_step();
+                    }
+                }
+
+                EventOutcome {
+                    changed,
+                    step_advanced: advanced,
+                    ship_updated: false,
+                }
             }
             GameEvent::Loadout(loadout) => {
                 let name = loadout.ship_name.trim();
@@ -142,6 +211,7 @@ impl GameTracker {
             GameEvent::Cargo(cargo) => {
                 tracing::info!("Cargo: {}t on board", cargo.count);
                 state.current_cargo = Some(cargo.clone());
+                state.sync_cargo_with_current_step();
                 EventOutcome {
                     changed: true,
                     step_advanced: false,
@@ -156,7 +226,40 @@ impl GameTracker {
                     ship_updated: false,
                 }
             }
-            GameEvent::MarketBuy { .. } => EventOutcome::default(),
+            GameEvent::MarketBuy { commodity, count } => {
+                let mut changed = false;
+
+                let matching_comm = state.current_step().and_then(|step| {
+                    step.commodities
+                        .iter()
+                        .find(|c| c.name.eq_ignore_ascii_case(commodity))
+                        .map(|c| c.name.clone())
+                });
+
+                if let Some(comm_name) = matching_comm {
+                    state.step_commodities_bought.insert(comm_name);
+                    tracing::info!("Target commodity bought: {} ({}t)", commodity, count);
+                    changed = true;
+
+                    // Switch to the next unbought commodity if available
+                    let next_unbought_idx = state.current_step().and_then(|step| {
+                        step.commodities
+                            .iter()
+                            .enumerate()
+                            .find(|(_, c)| !state.step_commodities_bought.contains(&c.name))
+                            .map(|(idx, _)| idx)
+                    });
+                    if let Some(idx) = next_unbought_idx {
+                        state.current_commodity_index = idx;
+                    }
+                }
+
+                EventOutcome {
+                    changed,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
+            }
         }
     }
 
