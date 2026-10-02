@@ -79,6 +79,7 @@ impl SpanshHttpClient {
         timeout: Duration,
     ) -> Result<TradeRouteResultResponse, ApiError> {
         let start = tokio::time::Instant::now();
+        let mut last_log = tokio::time::Instant::now();
         let mut headers = HeaderMap::new();
         headers.insert(
             "X-Requested-With",
@@ -104,17 +105,31 @@ impl SpanshHttpClient {
                     }
 
                     if res.result.is_some() {
+                        tracing::info!(
+                            "Spansh route calculation completed in {:.1}s",
+                            start.elapsed().as_secs_f32()
+                        );
                         return Ok(res);
                     }
 
-                    let status = res.status.as_deref().unwrap_or("");
-                    let state = res.state.as_deref().unwrap_or("");
+                    let status = res.status.as_deref().unwrap_or("unknown");
+                    let state = res.state.as_deref().unwrap_or("unknown");
 
                     if status == "error" || state == "failed" {
                         return Err(ApiError::JobFailed(
                             res.error
                                 .unwrap_or_else(|| "Unknown Spansh error".to_string()),
                         ));
+                    }
+
+                    if last_log.elapsed() >= Duration::from_secs(15) {
+                        tracing::info!(
+                            "Waiting for Spansh route calculation: job {} (state: {}, elapsed: {:.0}s)...",
+                            job,
+                            state,
+                            start.elapsed().as_secs_f32()
+                        );
+                        last_log = tokio::time::Instant::now();
                     }
                 }
                 Err(e) => {
@@ -191,8 +206,8 @@ impl SpanshClient for SpanshHttpClient {
             let result = self
                 .await_route(
                     &job.job,
-                    Duration::from_millis(1500),
-                    Duration::from_secs(45),
+                    Duration::from_millis(2000),
+                    Duration::from_secs(300),
                 )
                 .await?;
 
