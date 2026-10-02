@@ -1,8 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
-pub enum API {
+pub enum ApiError {
     #[error("HTTP request failed: {0}")]
     RequestFailed(#[from] reqwest::Error),
 
@@ -20,23 +19,32 @@ pub enum API {
 }
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
-pub enum Core {
-    #[error("IO error: {0}")]
-    ReadFileFailed(#[from] std::io::Error),
+pub enum CoreError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
-    #[error("Failed to parse TOML: {0}")]
-    LoadTOMLFailed(#[from] toml::de::Error),
+    #[error("Failed to deserialize TOML: {0}")]
+    TomlDe(#[from] toml::de::Error),
 
     #[error("Failed to serialize TOML: {0}")]
-    SaveTOMLFailed(#[from] toml::ser::Error),
+    TomlSer(#[from] toml::ser::Error),
 
-    #[error("Failed to save/load TOML config")]
-    TOMLError(),
+    #[error("Failed to parse JSON: {0}")]
+    Json(#[from] serde_json::Error),
 
-    #[error("Clipboard operation failed: {0}")]
-    ClipboardError(String),
+    #[error("Clipboard error: {0}")]
+    Clipboard(String),
 
     #[error("Journal error: {0}")]
-    JournalError(String),
+    Journal(String),
+
+    #[error("Hotkey error: {0}")]
+    Hotkey(String),
+
+    #[error("Configuration error: {0}")]
+    Config(String),
 }
+
+// Type aliases for legacy backward-compatibility during phased migration
+pub type Api = ApiError;
+pub type Core = CoreError;
