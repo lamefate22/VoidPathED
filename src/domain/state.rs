@@ -1,4 +1,4 @@
-use crate::domain::event::ShipStatus;
+use crate::domain::event::{CargoHold, ShipLoadout, ShipStatus};
 use crate::domain::route::RouteStep;
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -12,6 +12,10 @@ pub struct AppState {
     pub is_searching: bool,
     pub last_error: Option<String>,
     pub ship_status: ShipStatus,
+    pub current_ship: Option<ShipLoadout>,
+    pub current_cargo: Option<CargoHold>,
+    pub click_through: bool,
+    pub notification: Option<String>,
 }
 
 impl AppState {

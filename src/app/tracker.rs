@@ -1,12 +1,23 @@
 use crate::domain::event::{GameEvent, ShipStatus};
 use crate::domain::state::AppState;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EventOutcome {
+    pub changed: bool,
+    pub step_advanced: bool,
+    pub ship_updated: bool,
+}
+
 pub struct GameTracker;
 
 impl GameTracker {
     /// Applies a GameEvent to the AppState, performing auto-advance checks when enabled.
-    /// Returns true if the state changed or advanced.
-    pub fn handle_event(state: &mut AppState, event: &GameEvent, auto_advance: bool) -> bool {
+    /// Returns EventOutcome indicating what changed and whether hop advanced.
+    pub fn handle_event(
+        state: &mut AppState,
+        event: &GameEvent,
+        auto_advance: bool,
+    ) -> EventOutcome {
         state.journal_connected = true;
 
         match event {
@@ -20,18 +31,27 @@ impl GameTracker {
                     state.current_station = st_name.clone();
                 }
                 state.is_docked = *docked;
-                true
+                EventOutcome {
+                    changed: true,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
             }
             GameEvent::Jump { system } => {
                 state.current_system = system.clone();
                 state.is_docked = false;
-                true
+                EventOutcome {
+                    changed: true,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
             }
             GameEvent::Docked { system, station } => {
                 state.current_system = system.clone();
                 state.current_station = station.clone();
                 state.is_docked = true;
 
+                let mut advanced = false;
                 if auto_advance
                     && let Some(step) = state.current_step()
                     && step.destination.system.eq_ignore_ascii_case(system)
@@ -42,13 +62,21 @@ impl GameTracker {
                         system,
                         station
                     );
-                    state.next_step();
+                    advanced = state.next_step();
                 }
-                true
+                EventOutcome {
+                    changed: true,
+                    step_advanced: advanced,
+                    ship_updated: false,
+                }
             }
             GameEvent::Undocked { .. } => {
                 state.is_docked = false;
-                true
+                EventOutcome {
+                    changed: true,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
             }
             GameEvent::MarketSell { commodity, .. } => {
                 if auto_advance
@@ -69,14 +97,50 @@ impl GameTracker {
                             commodity,
                             state.current_system
                         );
-                        state.next_step();
-                        return true;
+                        let advanced = state.next_step();
+                        return EventOutcome {
+                            changed: true,
+                            step_advanced: advanced,
+                            ship_updated: false,
+                        };
                     }
                 }
-                false
+                EventOutcome::default()
             }
-            GameEvent::Status(status) => Self::handle_status(state, *status),
-            GameEvent::MarketBuy { .. } => false,
+            GameEvent::Loadout(loadout) => {
+                tracing::info!(
+                    "Player ship loadout detected: {} ({}) - Cargo: {}t, Jump: {:.1} LY, Pad: {:?}",
+                    loadout.ship_name,
+                    loadout.ship_type,
+                    loadout.cargo_capacity,
+                    loadout.max_jump_range,
+                    loadout.pad_size
+                );
+                state.current_ship = Some(loadout.clone());
+                EventOutcome {
+                    changed: true,
+                    step_advanced: false,
+                    ship_updated: true,
+                }
+            }
+            GameEvent::Cargo(cargo) => {
+                tracing::info!("Player cargo hold updated: {} items on board", cargo.count);
+                state.current_cargo = Some(cargo.clone());
+                EventOutcome {
+                    changed: true,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
+            }
+            GameEvent::Status(status) => {
+                let changed = Self::handle_status(state, *status);
+                EventOutcome {
+                    changed,
+                    step_advanced: false,
+                    ship_updated: false,
+                }
+            }
+            GameEvent::MarketBuy { .. } => EventOutcome::default(),
         }
     }
 

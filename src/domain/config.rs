@@ -15,6 +15,14 @@ pub struct GeneralConfig {
     pub hotkey: String,
     #[serde(default)]
     pub journal_path: String,
+    #[serde(default = "default_true")]
+    pub auto_copy_system: bool,
+    #[serde(default)]
+    pub click_through: bool,
+    #[serde(default = "default_true")]
+    pub sound_enabled: bool,
+    #[serde(default = "default_true")]
+    pub auto_sync_ship: bool,
     #[serde(default)]
     pub window_x: Option<i32>,
     #[serde(default)]
@@ -29,12 +37,20 @@ fn default_hotkey() -> String {
     "Ctrl+Shift+V".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             auto_advance_route: default_auto_advance(),
             hotkey: default_hotkey(),
             journal_path: String::new(),
+            auto_copy_system: true,
+            click_through: false,
+            sound_enabled: true,
+            auto_sync_ship: true,
             window_x: None,
             window_y: None,
         }

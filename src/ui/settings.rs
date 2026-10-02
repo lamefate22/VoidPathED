@@ -57,8 +57,20 @@ pub fn show_settings_window(
         window.set_permit(s.permit);
 
         window.set_auto_advance_route(g.auto_advance_route);
+        window.set_auto_sync_ship(g.auto_sync_ship);
+        window.set_auto_copy_system(g.auto_copy_system);
+        window.set_sound_enabled(g.sound_enabled);
         window.set_hotkey_str(g.hotkey.clone().into());
         window.set_journal_path(g.journal_path.clone().into());
+
+        let st = lock_mutex(&state);
+        if let Some(ship) = &st.current_ship {
+            let info = format!(
+                "{} ({}t | {:.1} LY | {:?})",
+                ship.ship_name, ship.cargo_capacity, ship.max_jump_range, ship.pad_size
+            );
+            window.set_detected_ship_info(info.into());
+        }
     }
 
     show_child_window_centered(
@@ -216,6 +228,9 @@ pub fn show_settings_window(
 
                     let g = &mut cfg.general;
                     g.auto_advance_route = win.get_auto_advance_route();
+                    g.auto_sync_ship = win.get_auto_sync_ship();
+                    g.auto_copy_system = win.get_auto_copy_system();
+                    g.sound_enabled = win.get_sound_enabled();
                     g.hotkey = win.get_hotkey_str().to_string();
                     g.journal_path = win.get_journal_path().to_string();
 
@@ -232,6 +247,23 @@ pub fn show_settings_window(
                     }
 
                     let _ = win.hide();
+                }
+            });
+
+            // Browse custom journal path callback
+            win.on_browse_journal_path({
+                let w = win.as_weak();
+                move || {
+                    let w = w.clone();
+                    std::thread::spawn(move || {
+                        if let Some(folder) = crate::infra::os::window::pick_folder() {
+                            let _ = slint::invoke_from_event_loop(move || {
+                                if let Some(win) = w.upgrade() {
+                                    win.set_journal_path(folder.into());
+                                }
+                            });
+                        }
+                    });
                 }
             });
         },

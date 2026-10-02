@@ -113,12 +113,14 @@ export component SettingsWindow inherits Window {
     callback auto-detect-location();
     callback close-window();
     callback save();
+    callback browse-journal-path();
 
     in property <[StationSuggestion]> station-suggestions: [];
     in-out property <string> starting-point: "Sol / Galileo";
     in-out property <string> selected-station: "Galileo";
     in-out property <string> selected-system: "Sol";
     in-out property <bool> show-suggestions: false;
+    in property <string> detected-ship-info: "";
 
     // Route Parameters
     in-out property <int> max-hops: 10;
@@ -139,6 +141,9 @@ export component SettingsWindow inherits Window {
 
     // App Settings
     in-out property <bool> auto-advance-route: true;
+    in-out property <bool> auto-sync-ship: true;
+    in-out property <bool> auto-copy-system: true;
+    in-out property <bool> sound-enabled: true;
     in-out property <string> hotkey-str: "Ctrl+Shift+V";
     in-out property <string> journal-path: "";
 
@@ -232,6 +237,37 @@ export component SettingsWindow inherits Window {
 
                                 detect-area := TouchArea {
                                     clicked => { root.auto-detect-location(); }
+                                }
+                            }
+                        }
+
+                        if root.detected-ship-info != "": Rectangle {
+                            background: #5DCAA515;
+                            border-radius: 6px;
+                            border-width: 0.5px;
+                            border-color: #5DCAA540;
+                            height: 32px;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                alignment: space-between;
+
+                                Text {
+                                    text: "Current Ship Build:";
+                                    color: #FFFFFF80;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                    vertical-alignment: center;
+                                }
+
+                                Text {
+                                    text: root.detected-ship-info;
+                                    color: #5DCAA5;
+                                    font-size: 11px;
+                                    font-family: "Inter";
+                                    font-weight: 600;
+                                    vertical-alignment: center;
                                 }
                             }
                         }
@@ -437,15 +473,79 @@ export component SettingsWindow inherits Window {
                                 label: "Auto-advance route on ED Journal event";
                                 checked <=> root.auto-advance-route;
                             }
+                            SettingToggleRow {
+                                label: "Auto-sync ship loadout (Cargo & Jump range)";
+                                checked <=> root.auto-sync-ship;
+                            }
+                            SettingToggleRow {
+                                label: "Auto-copy next system on hop change";
+                                checked <=> root.auto-copy-system;
+                            }
+                            SettingToggleRow {
+                                label: "Sound effects (Chimes on navigation & copy)";
+                                checked <=> root.sound-enabled;
+                            }
                             SettingInputRow {
                                 label: "Global Hotkey (Toggle Overlay)";
                                 text <=> root.hotkey-str;
                                 placeholder: "Ctrl+Shift+V";
                             }
-                            SettingInputRow {
-                                label: "Custom Journal Folder";
-                                text <=> root.journal-path;
-                                placeholder: "Auto-detect default";
+                            Rectangle {
+                                border-color: #FFFFFF0F;
+                                background: #1E1E24;
+                                border-width: 0.5px;
+                                border-radius: 6px;
+                                height: 40px;
+
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    padding-right: 14px;
+                                    padding-left: 14px;
+
+                                    Text {
+                                        vertical-alignment: center;
+                                        color: #FFFFFFB3;
+                                        text: "Custom Journal Folder";
+                                        font-size: 12px;
+                                        font-family: "Inter";
+                                    }
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        spacing: 6px;
+
+                                        LineEdit {
+                                            text <=> root.journal-path;
+                                            placeholder-text: "Auto-detect default";
+                                            font-size: 12px;
+                                            width: 140px;
+                                            height: 26px;
+                                        }
+
+                                        Rectangle {
+                                            background: browse-btn.has-hover ? #5DCAA530 : #ffffff15;
+                                            border-radius: 4px;
+                                            border-width: 0.5px;
+                                            border-color: #ffffff20;
+                                            width: 55px;
+                                            height: 26px;
+
+                                            Text {
+                                                text: "Browse";
+                                                color: #5DCAA5;
+                                                font-size: 10px;
+                                                font-family: "Inter";
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            browse-btn := TouchArea {
+                                                clicked => { root.browse-journal-path(); }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

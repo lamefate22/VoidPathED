@@ -43,6 +43,11 @@ export component MainWindow inherits Window {
     // Animation helper for search spinner
     in-out property <float> search-spinner-angle: 0;
 
+    // Ship & Cargo Info
+    in property <string> ship-info-text: "";
+    in property <string> cargo-info-text: "";
+    in property <bool> is-click-through: false;
+
     // Callbacks
     callback close-window();
     callback search-route();
@@ -51,6 +56,8 @@ export component MainWindow inherits Window {
     callback prev-hop();
     callback copy-dest-system();
     callback clear-route();
+    callback window-drag-started();
+    callback toggle-click-through();
 
     Timer {
         interval: 16ms;
@@ -525,46 +532,132 @@ export component MainWindow inherits Window {
             }
         }
 
-        // FLOATING TOP-RIGHT CONTROLS (ANCHORED RIGHT)
+        // TOP DRAG AREA (DRAG OVERLAY ACROSS SCREEN)
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: root.width - 100px;
+            height: 28px;
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                    root.window-drag-started();
+                }
+            }
+        }
+
+        // FLOATING TOP BAR (SHIP & CARGO BADGES ON LEFT, CONTROLS ON RIGHT)
         HorizontalLayout {
             x: 0px;
             y: 0px;
             width: root.width;
             height: 32px;
-            alignment: end;
+            alignment: space-between;
+            padding-left: 12px;
             padding-right: 12px;
-            padding-top: 10px;
-            spacing: 8px;
+            padding-top: 8px;
 
-            Rectangle {
-                width: 20px;
-                height: 20px;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
 
-                Image {
-                    colorize: settings-area.has-hover ? #ffffff : #8E8E93;
-                    source: @image-url("assets/settings.svg");
-                    height: 14px;
-                    width: 14px;
+                if root.ship-info-text != "": Rectangle {
+                    background: #ffffff0d;
+                    border-radius: 4px;
+                    border-width: 0.5px;
+                    border-color: #ffffff18;
+                    height: 18px;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+
+                        Text {
+                            text: root.ship-info-text;
+                            color: #FFFFFF80;
+                            font-size: 10px;
+                            font-family: "Inter";
+                            font-weight: 500;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
 
-                settings-area := TouchArea {
-                    clicked => { root.open-settings(); }
+                if root.cargo-info-text != "": Rectangle {
+                    background: #5DCAA515;
+                    border-radius: 4px;
+                    border-width: 0.5px;
+                    border-color: #5DCAA540;
+                    height: 18px;
+
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+
+                        Text {
+                            text: root.cargo-info-text;
+                            color: #5DCAA5;
+                            font-size: 10px;
+                            font-family: "Inter";
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
             }
 
-            Rectangle {
-                width: 20px;
-                height: 20px;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
 
-                Image {
-                    colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
-                    source: @image-url("assets/close.svg");
-                    height: 14px;
-                    width: 14px;
+                // Click-through toggle button
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    background: root.is-click-through ? #5DCAA530 : (ct-area.has-hover ? #ffffff15 : transparent);
+                    border-radius: 4px;
+
+                    Text {
+                        text: root.is-click-through ? "🔒" : "🔓";
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    ct-area := TouchArea {
+                        clicked => { root.toggle-click-through(); }
+                    }
                 }
 
-                close-area := TouchArea {
-                    clicked => { root.close-window(); }
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+
+                    Image {
+                        colorize: settings-area.has-hover ? #ffffff : #8E8E93;
+                        source: @image-url("assets/settings.svg");
+                        height: 14px;
+                        width: 14px;
+                    }
+
+                    settings-area := TouchArea {
+                        clicked => { root.open-settings(); }
+                    }
+                }
+
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+
+                    Image {
+                        colorize: close-area.has-hover ? #ff5f57 : #8E8E93;
+                        source: @image-url("assets/close.svg");
+                        height: 14px;
+                        width: 14px;
+                    }
+
+                    close-area := TouchArea {
+                        clicked => { root.close-window(); }
+                    }
                 }
             }
         }

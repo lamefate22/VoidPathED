@@ -4,11 +4,15 @@ use std::time::Duration;
 
 use crate::app::{ActionHandler, GameTracker, TradeCoordinator};
 use crate::contract::{
-    ClipboardService, ConfigStore, HotkeyListener, JournalWatcher, SpanshClient, StatusWatcher,
+    ClipboardService, ConfigStore, HotkeyListener, JournalWatcher, SoundPlayer, SpanshClient,
+    StatusWatcher, TrayManager,
 };
 use crate::domain::config::AppConfig;
+use crate::domain::event::LandingPadSize;
 use crate::domain::state::AppState;
-use crate::infra::os::window::{center_window_top, show_window};
+use crate::infra::os::window::{
+    center_window_top, drag_window, position_window_at, set_click_through, show_window,
+};
 use crate::ui::MainWindow;
 use crate::ui::mapper::{
     format_distance_ls, format_distance_ly, format_location, format_profit, format_unit_profit,
@@ -27,6 +31,29 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
 
     win.set_journal_connected(state.journal_connected);
     win.set_is_searching_route(state.is_searching);
+    win.set_is_click_through(state.click_through);
+
+    if let Some(ship) = &state.current_ship {
+        let text = format!(
+            "{} ({}t | {:.1} LY)",
+            ship.ship_name, ship.cargo_capacity, ship.max_jump_range
+        );
+        win.set_ship_info_text(text.into());
+    } else {
+        win.set_ship_info_text("".into());
+    }
+
+    if let Some(cargo) = &state.current_cargo {
+        if let Some(ship) = &state.current_ship {
+            win.set_cargo_info_text(
+                format!("Cargo: {}/{}t", cargo.count, ship.cargo_capacity).into(),
+            );
+        } else {
+            win.set_cargo_info_text(format!("Cargo: {}t", cargo.count).into());
+        }
+    } else {
+        win.set_cargo_info_text("".into());
+    }
 
     let start_system = if !state.current_system.is_empty() {
         &state.current_system
@@ -98,6 +125,8 @@ pub struct MainWindowContext {
     pub spansh: Arc<dyn SpanshClient>,
     pub clipboard: Arc<dyn ClipboardService>,
     pub hotkey: Arc<dyn HotkeyListener>,
+    pub sound: Arc<dyn SoundPlayer>,
+    pub tray: Arc<dyn TrayManager>,
     pub journal: Option<Arc<dyn JournalWatcher>>,
     pub status: Option<Arc<dyn StatusWatcher>>,
 }
@@ -111,6 +140,8 @@ pub fn show_main_window(ctx: MainWindowContext) {
         spansh,
         clipboard,
         hotkey,
+        sound,
+        tray,
         journal,
         status,
     } = ctx;
@@ -121,6 +152,13 @@ pub fn show_main_window(ctx: MainWindowContext) {
             return;
         }
     };
+
+    // Position window and show tray icon
+    {
+        let cfg = lock_mutex(&config);
+        position_window_at(&window, cfg.general.window_x, cfg.general.window_y);
+        tray.show_tray_icon();
+    }
 
     // Initial render
     {
@@ -133,16 +171,44 @@ pub fn show_main_window(ctx: MainWindowContext) {
     if let Some(ref j) = journal {
         let state_c = Arc::clone(&state);
         let config_c = Arc::clone(&config);
+        let config_store_c = Arc::clone(&config_store);
+        let clipboard_c = Arc::clone(&clipboard);
+        let sound_c = Arc::clone(&sound);
         let win_weak_c = window.as_weak();
 
         let _ = j.start(Box::new(move |event| {
             let mut st = lock_mutex(&state_c);
-            let cfg = lock_mutex(&config_c);
+            let mut cfg = lock_mutex(&config_c);
 
             let auto_advance = cfg.general.auto_advance_route;
-            let changed = GameTracker::handle_event(&mut st, &event, auto_advance);
+            let outcome = GameTracker::handle_event(&mut st, &event, auto_advance);
 
-            if changed {
+            if outcome.ship_updated
+                && cfg.general.auto_sync_ship
+                && let Some(ship) = &st.current_ship
+            {
+                if ship.cargo_capacity > 0 {
+                    cfg.search.max_cargo = ship.cargo_capacity as u16;
+                }
+                if ship.max_jump_range > 0.0 {
+                    cfg.search.max_hop_distance = ship.max_jump_range.floor() as u16;
+                }
+                cfg.search.requires_large_pad = ship.pad_size == LandingPadSize::Large;
+                let _ = config_store_c.save(&cfg);
+            }
+
+            if outcome.step_advanced
+                && cfg.general.auto_copy_system
+                && let Some(step) = st.current_step()
+            {
+                let _ = clipboard_c.set_text(&step.destination.system);
+            }
+
+            if outcome.step_advanced && cfg.general.sound_enabled {
+                sound_c.play_advance();
+            }
+
+            if outcome.changed {
                 let state_snapshot = st.clone();
                 let config_snapshot = cfg.clone();
                 let win_weak = win_weak_c.clone();
@@ -213,12 +279,65 @@ pub fn show_main_window(ctx: MainWindowContext) {
     );
 
     show_window(window, move |win| {
-        // Close window callback
-        win.on_close_window({
+        // Drag window callback
+        win.on_window_drag_started(|| {
+            drag_window("VoidPath ED");
+        });
+
+        // Toggle click-through callback
+        win.on_toggle_click_through({
+            let state = Arc::clone(&state);
+            let config = Arc::clone(&config);
+            let sound = Arc::clone(&sound);
             let w = win.as_weak();
             move || {
+                let mut st = lock_mutex(&state);
+                st.click_through = !st.click_through;
+                let enabled = st.click_through;
+                set_click_through("VoidPath ED", enabled);
+
+                let cfg = lock_mutex(&config);
+                if cfg.general.sound_enabled {
+                    sound.play_advance();
+                }
+
+                if let Some(win) = w.upgrade() {
+                    win.set_is_click_through(enabled);
+                    let msg = if enabled {
+                        "Click-through: ON"
+                    } else {
+                        "Click-through: OFF"
+                    };
+                    win.set_notification_message(msg.into());
+                    win.set_show_notification(true);
+
+                    let w_timer = w.clone();
+                    let _ = slint::spawn_local(async move {
+                        tokio::time::sleep(Duration::from_millis(2000)).await;
+                        if let Some(win) = w_timer.upgrade() {
+                            win.set_show_notification(false);
+                        }
+                    });
+                }
+            }
+        });
+
+        // Close window callback (saves position and exits)
+        win.on_close_window({
+            let w = win.as_weak();
+            let config = Arc::clone(&config);
+            let config_store = Arc::clone(&config_store);
+            let tray = Arc::clone(&tray);
+            move || {
                 if let Some(w) = w.upgrade() {
+                    let pos = w.window().position();
+                    let mut cfg = lock_mutex(&config);
+                    cfg.general.window_x = Some(pos.x);
+                    cfg.general.window_y = Some(pos.y);
+                    let _ = config_store.save(&cfg);
+                    tray.remove_tray_icon();
                     let _ = w.hide();
+                    std::process::exit(0);
                 }
             }
         });
@@ -246,6 +365,8 @@ pub fn show_main_window(ctx: MainWindowContext) {
             let state = Arc::clone(&state);
             let config = Arc::clone(&config);
             let trade_coord = Arc::clone(&trade_coord);
+            let clipboard = Arc::clone(&clipboard);
+            let sound = Arc::clone(&sound);
             let w = win.as_weak();
             move || {
                 let mut st = lock_mutex(&state);
@@ -253,7 +374,15 @@ pub fn show_main_window(ctx: MainWindowContext) {
                 if let Some(ref route) = st.active_route {
                     trade_coord.save_cached_step(route, st.current_step_index);
                 }
+
                 let cfg = lock_mutex(&config);
+                if cfg.general.auto_copy_system {
+                    let _ = ActionHandler::copy_target_system(&st, &*clipboard);
+                }
+                if cfg.general.sound_enabled {
+                    sound.play_advance();
+                }
+
                 if let Some(win) = w.upgrade() {
                     update_main_ui(&win, &st, &cfg);
                 }
@@ -265,6 +394,8 @@ pub fn show_main_window(ctx: MainWindowContext) {
             let state = Arc::clone(&state);
             let config = Arc::clone(&config);
             let trade_coord = Arc::clone(&trade_coord);
+            let clipboard = Arc::clone(&clipboard);
+            let sound = Arc::clone(&sound);
             let w = win.as_weak();
             move || {
                 let mut st = lock_mutex(&state);
@@ -272,7 +403,15 @@ pub fn show_main_window(ctx: MainWindowContext) {
                 if let Some(ref route) = st.active_route {
                     trade_coord.save_cached_step(route, st.current_step_index);
                 }
+
                 let cfg = lock_mutex(&config);
+                if cfg.general.auto_copy_system {
+                    let _ = ActionHandler::copy_target_system(&st, &*clipboard);
+                }
+                if cfg.general.sound_enabled {
+                    sound.play_advance();
+                }
+
                 if let Some(win) = w.upgrade() {
                     update_main_ui(&win, &st, &cfg);
                 }
@@ -282,12 +421,19 @@ pub fn show_main_window(ctx: MainWindowContext) {
         // Copy Target Destination System to Clipboard
         win.on_copy_dest_system({
             let state = Arc::clone(&state);
+            let config = Arc::clone(&config);
             let clipboard = Arc::clone(&clipboard);
+            let sound = Arc::clone(&sound);
             let w = win.as_weak();
             move || {
                 let st = lock_mutex(&state);
                 match ActionHandler::copy_target_system(&st, &*clipboard) {
                     Ok(dest_system) => {
+                        let cfg = lock_mutex(&config);
+                        if cfg.general.sound_enabled {
+                            sound.play_success();
+                        }
+
                         if let Some(win) = w.upgrade() {
                             win.set_notification_message(
                                 format!("Copied '{}'", dest_system).into(),
@@ -335,6 +481,7 @@ pub fn show_main_window(ctx: MainWindowContext) {
             let state = Arc::clone(&state);
             let config = Arc::clone(&config);
             let trade_coord = Arc::clone(&trade_coord);
+            let sound = Arc::clone(&sound);
             let w = win.as_weak();
 
             move || {
@@ -367,6 +514,7 @@ pub fn show_main_window(ctx: MainWindowContext) {
                 let state_clone = Arc::clone(&state);
                 let config_clone = Arc::clone(&config);
                 let trade_coord_clone = Arc::clone(&trade_coord);
+                let sound_clone = Arc::clone(&sound);
                 let w_clone = w.clone();
 
                 let spawn_res = slint::spawn_local(async move {
@@ -375,12 +523,20 @@ pub fn show_main_window(ctx: MainWindowContext) {
                             tracing::info!("Found route with {} hops", steps.len());
                             let mut st = lock_mutex(&state_clone);
                             st.set_route(steps);
+                            let cfg = lock_mutex(&config_clone);
+                            if cfg.general.sound_enabled {
+                                sound_clone.play_success();
+                            }
                         }
                         Err(e) => {
                             tracing::error!("Route search failed: {}", e);
                             let mut st = lock_mutex(&state_clone);
                             st.is_searching = false;
                             st.last_error = Some(format!("Search failed: {}", e));
+                            let cfg = lock_mutex(&config_clone);
+                            if cfg.general.sound_enabled {
+                                sound_clone.play_error();
+                            }
                         }
                     }
 

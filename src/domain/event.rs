@@ -26,7 +26,78 @@ pub enum GameEvent {
         count: u32,
         profit: Option<i64>,
     },
+    Loadout(ShipLoadout),
+    Cargo(CargoHold),
     Status(ShipStatus),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LandingPadSize {
+    Small,
+    Medium,
+    Large,
+}
+
+impl LandingPadSize {
+    pub fn from_ship_type(ship_type: &str) -> Self {
+        let clean = ship_type.trim().to_ascii_lowercase();
+        if clean.contains("anaconda")
+            || clean.contains("beluga")
+            || clean.contains("cutter")
+            || clean.contains("corvette")
+            || clean.contains("type9")
+            || clean.contains("type10")
+            || clean.contains("type7")
+            || clean.contains("type_7")
+            || clean.contains("orca")
+            || clean.contains("clipper")
+        {
+            Self::Large
+        } else if clean.contains("asp")
+            || clean.contains("python")
+            || clean.contains("krait")
+            || clean.contains("ferdelance")
+            || clean.contains("fdl")
+            || clean.contains("chieftain")
+            || clean.contains("crusader")
+            || clean.contains("challenger")
+            || clean.contains("dropship")
+            || clean.contains("gunship")
+            || clean.contains("assault")
+            || clean.contains("keelback")
+            || clean.contains("mandalay")
+            || clean.contains("typex")
+            || clean.contains("independant_trader")
+        {
+            Self::Medium
+        } else {
+            Self::Small
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShipLoadout {
+    pub ship_type: String,
+    pub ship_name: String,
+    pub ship_ident: String,
+    pub cargo_capacity: u32,
+    pub max_jump_range: f32,
+    pub pad_size: LandingPadSize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CargoItem {
+    pub name: String,
+    pub name_localised: Option<String>,
+    pub count: u32,
+    pub stolen: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CargoHold {
+    pub count: u32,
+    pub items: Vec<CargoItem>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

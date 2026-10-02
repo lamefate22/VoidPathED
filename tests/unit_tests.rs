@@ -342,3 +342,117 @@ fn test_hotkey_parsing() {
 
     assert!(parse_hotkey("invalid_combo_???").is_none());
 }
+
+#[test]
+fn test_ship_loadout_parsing_and_pad_sizes() {
+    use voidpath_rs::domain::event::LandingPadSize;
+    use voidpath_rs::infra::game::GameJournalWatcher;
+
+    assert_eq!(
+        LandingPadSize::from_ship_type("Anaconda"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("Type9"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("type9_military"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("cutter"),
+        LandingPadSize::Large
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("Python"),
+        LandingPadSize::Medium
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("krait_mkii"),
+        LandingPadSize::Medium
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("sidewinder"),
+        LandingPadSize::Small
+    );
+    assert_eq!(
+        LandingPadSize::from_ship_type("hauler"),
+        LandingPadSize::Small
+    );
+
+    let loadout_line = r#"{
+        "timestamp":"2026-10-02T12:00:00Z",
+        "event":"Loadout",
+        "Ship":"type9",
+        "ShipName":"TITAN EXPRESS",
+        "ShipIdent":"TX-99",
+        "CargoCapacity":752,
+        "MaxJumpRange":28.65
+    }"#;
+
+    let event = GameJournalWatcher::parse_journal_line(loadout_line).expect("Should parse Loadout");
+    if let GameEvent::Loadout(loadout) = event {
+        assert_eq!(loadout.ship_type, "type9");
+        assert_eq!(loadout.ship_name, "TITAN EXPRESS");
+        assert_eq!(loadout.ship_ident, "TX-99");
+        assert_eq!(loadout.cargo_capacity, 752);
+        assert!((loadout.max_jump_range - 28.65).abs() < 0.01);
+        assert_eq!(loadout.pad_size, LandingPadSize::Large);
+    } else {
+        panic!("Expected GameEvent::Loadout");
+    }
+}
+
+#[test]
+fn test_cargo_parsing_and_tracker_sync() {
+    use voidpath_rs::domain::event::LandingPadSize;
+    use voidpath_rs::infra::game::GameJournalWatcher;
+
+    let cargo_line = r#"{
+        "timestamp":"2026-10-02T12:05:00Z",
+        "event":"Cargo",
+        "Vessel":"Ship",
+        "Count":720,
+        "Inventory":[
+            {"Name":"gold", "Name_Localised":"Gold", "Count":500, "Stolen":0},
+            {"Name":"silver", "Name_Localised":"Silver", "Count":220, "Stolen":0}
+        ]
+    }"#;
+
+    let event = GameJournalWatcher::parse_journal_line(cargo_line).expect("Should parse Cargo");
+    let mut state = AppState::new();
+    let outcome = GameTracker::handle_event(&mut state, &event, true);
+
+    assert!(outcome.changed);
+    assert!(!outcome.step_advanced);
+    assert!(!outcome.ship_updated);
+    let cargo = state
+        .current_cargo
+        .as_ref()
+        .expect("Cargo hold should be populated");
+    assert_eq!(cargo.count, 720);
+    assert_eq!(cargo.items.len(), 2);
+    assert_eq!(cargo.items[0].name, "gold");
+    assert_eq!(cargo.items[0].count, 500);
+
+    // Test Loadout sync
+    let loadout_line = r#"{
+        "timestamp":"2026-10-02T12:00:00Z",
+        "event":"Loadout",
+        "Ship":"python",
+        "ShipName":"PYTHON RUNNER",
+        "CargoCapacity":280,
+        "MaxJumpRange":34.2
+    }"#;
+
+    let loadout_event =
+        GameJournalWatcher::parse_journal_line(loadout_line).expect("Parse loadout");
+    let loadout_outcome = GameTracker::handle_event(&mut state, &loadout_event, true);
+
+    assert!(loadout_outcome.changed);
+    assert!(loadout_outcome.ship_updated);
+    let ship = state.current_ship.expect("Ship should be present");
+    assert_eq!(ship.cargo_capacity, 280);
+    assert_eq!(ship.pad_size, LandingPadSize::Medium);
+}

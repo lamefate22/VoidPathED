@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::contract::JournalWatcher;
-use crate::domain::event::GameEvent;
+use crate::domain::event::{CargoHold, CargoItem, GameEvent, LandingPadSize, ShipLoadout};
 use crate::error::CoreError;
 use crate::infra::game::finder::get_latest_journal_file;
 
@@ -25,27 +25,70 @@ impl GameJournalWatcher {
         }
     }
 
-    pub fn read_initial_state(dir: &Path) -> Option<GameEvent> {
-        let latest_file = get_latest_journal_file(dir)?;
-        let file = File::open(&latest_file).ok()?;
-        let reader = BufReader::new(file);
+    pub fn read_cargo_json(dir: &Path) -> Option<CargoHold> {
+        let path = dir.join("Cargo.json");
+        let content = std::fs::read_to_string(&path).ok()?;
+        let v: Value = serde_json::from_str(&content).ok()?;
+        let count = v.get("Count").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+        let mut items = Vec::new();
+        if let Some(arr) = v.get("Inventory").and_then(|i| i.as_array()) {
+            for item in arr {
+                if let Some(name) = item.get("Name").and_then(|n| n.as_str()) {
+                    let name_localised = item
+                        .get("Name_Localised")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string());
+                    let item_count = item.get("Count").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+                    let stolen = item.get("Stolen").and_then(|s| s.as_u64()).unwrap_or(0) != 0;
+                    items.push(CargoItem {
+                        name: name.to_string(),
+                        name_localised,
+                        count: item_count,
+                        stolen,
+                    });
+                }
+            }
+        }
+        Some(CargoHold { count, items })
+    }
 
+    pub fn read_initial_events(dir: &Path) -> Vec<GameEvent> {
+        let mut events = Vec::new();
         let mut last_location_event = None;
+        let mut last_loadout_event = None;
 
-        for line in reader.lines().map_while(Result::ok) {
-            if let Some(event) = Self::parse_journal_line(&line) {
-                match &event {
-                    GameEvent::Location { .. }
-                    | GameEvent::Docked { .. }
-                    | GameEvent::Jump { .. } => {
-                        last_location_event = Some(event);
+        if let Some(latest_file) = get_latest_journal_file(dir)
+            && let Ok(file) = File::open(&latest_file)
+        {
+            let reader = BufReader::new(file);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(event) = Self::parse_journal_line(&line) {
+                    match &event {
+                        GameEvent::Location { .. }
+                        | GameEvent::Docked { .. }
+                        | GameEvent::Jump { .. } => {
+                            last_location_event = Some(event);
+                        }
+                        GameEvent::Loadout(_) => {
+                            last_loadout_event = Some(event);
+                        }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         }
 
-        last_location_event
+        if let Some(loc) = last_location_event {
+            events.push(loc);
+        }
+        if let Some(loadout) = last_loadout_event {
+            events.push(loadout);
+        }
+        if let Some(cargo) = Self::read_cargo_json(dir) {
+            events.push(GameEvent::Cargo(cargo));
+        }
+
+        events
     }
 
     pub fn parse_journal_line(line: &str) -> Option<GameEvent> {
@@ -103,6 +146,59 @@ impl GameJournalWatcher {
                     profit,
                 })
             }
+            "Loadout" => {
+                let ship_type = v.get("Ship")?.as_str()?.to_string();
+                let ship_name = v
+                    .get("ShipName")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let ship_ident = v
+                    .get("ShipIdent")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let cargo_capacity =
+                    v.get("CargoCapacity").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+                let max_jump_range = v
+                    .get("MaxJumpRange")
+                    .and_then(|j| j.as_f64())
+                    .unwrap_or(0.0) as f32;
+                let pad_size = LandingPadSize::from_ship_type(&ship_type);
+                Some(GameEvent::Loadout(ShipLoadout {
+                    ship_type,
+                    ship_name,
+                    ship_ident,
+                    cargo_capacity,
+                    max_jump_range,
+                    pad_size,
+                }))
+            }
+            "Cargo" => {
+                let count = v.get("Count").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+                let mut items = Vec::new();
+                if let Some(arr) = v.get("Inventory").and_then(|i| i.as_array()) {
+                    for item in arr {
+                        if let Some(name) = item.get("Name").and_then(|n| n.as_str()) {
+                            let name_localised = item
+                                .get("Name_Localised")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string());
+                            let item_count =
+                                item.get("Count").and_then(|c| c.as_u64()).unwrap_or(0) as u32;
+                            let stolen =
+                                item.get("Stolen").and_then(|s| s.as_u64()).unwrap_or(0) != 0;
+                            items.push(CargoItem {
+                                name: name.to_string(),
+                                name_localised,
+                                count: item_count,
+                                stolen,
+                            });
+                        }
+                    }
+                }
+                Some(GameEvent::Cargo(CargoHold { count, items }))
+            }
             _ => None,
         }
     }
@@ -124,7 +220,7 @@ impl JournalWatcher for GameJournalWatcher {
         std::thread::spawn(move || {
             tracing::info!("Started ED Journal watcher for directory {:?}", dir);
 
-            if let Some(initial_event) = Self::read_initial_state(&dir) {
+            for initial_event in Self::read_initial_events(&dir) {
                 tracing::info!("Initial journal state detected: {:?}", initial_event);
                 callback(initial_event);
             }
@@ -135,6 +231,10 @@ impl JournalWatcher for GameJournalWatcher {
             } else {
                 0
             };
+
+            let mut last_cargo_modified = std::fs::metadata(dir.join("Cargo.json"))
+                .and_then(|m| m.modified())
+                .ok();
 
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher: Option<RecommendedWatcher> = RecommendedWatcher::new(
@@ -174,6 +274,20 @@ impl JournalWatcher for GameJournalWatcher {
                             }
                         }
                         file_offset = current_len;
+                    }
+                }
+
+                // Check Cargo.json
+                if let Ok(m) = std::fs::metadata(dir.join("Cargo.json"))
+                    && let Ok(mod_time) = m.modified()
+                    && last_cargo_modified
+                        .map(|last| mod_time > last)
+                        .unwrap_or(true)
+                {
+                    last_cargo_modified = Some(mod_time);
+                    if let Some(cargo) = Self::read_cargo_json(&dir) {
+                        tracing::info!("Cargo.json updated: {:?}", cargo);
+                        callback(GameEvent::Cargo(cargo));
                     }
                 }
 

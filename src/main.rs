@@ -27,6 +27,8 @@ async fn main() {
     ));
     let clipboard = Arc::new(OsClipboard::new());
     let hotkey = Arc::new(OsHotkeyListener::new());
+    let sound = Arc::new(voidpath_rs::infra::os::Win32SoundPlayer::new());
+    let tray = Arc::new(voidpath_rs::infra::os::Win32TrayManager::new());
 
     // 2. Load Configuration
     let config = match config_store.load() {
@@ -79,6 +81,8 @@ async fn main() {
         spansh,
         clipboard,
         hotkey,
+        sound,
+        tray,
         journal: journal_watcher,
         status: status_watcher,
     });

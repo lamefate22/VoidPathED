@@ -62,6 +62,79 @@ pub fn set_click_through(title: &str, enable: bool) {
     }
 }
 
+#[cfg(target_os = "windows")]
+pub fn drag_window(title: &str) {
+    unsafe {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
+        use windows::Win32::UI::WindowsAndMessaging::{SendMessageW, WM_SYSCOMMAND};
+
+        let title_h = HSTRING::from(title);
+        if let Ok(hwnd) = FindWindowW(None, windows::core::PCWSTR(title_h.as_ptr()))
+            && hwnd != HWND::default()
+        {
+            let _ = ReleaseCapture();
+            let _ = SendMessageW(hwnd, WM_SYSCOMMAND, Some(WPARAM(0xF012)), Some(LPARAM(0)));
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn drag_window(_title: &str) {}
+
+pub fn pick_folder() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'Select Elite Dangerous Journal Directory'; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }",
+            ])
+            .output()
+            .ok()?;
+
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !s.is_empty() && std::path::Path::new(&s).exists() {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+pub fn position_window_at<T: slint::ComponentHandle + 'static>(
+    window: &T,
+    saved_x: Option<i32>,
+    saved_y: Option<i32>,
+) {
+    #[cfg(target_os = "windows")]
+    {
+        let window_weak = window.as_weak();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = window_weak.upgrade() {
+                let screen_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+                let win_w = window.window().size().width as i32;
+
+                let x = saved_x.unwrap_or_else(|| (screen_w - win_w) / 2);
+                let y = saved_y.unwrap_or(0);
+
+                window
+                    .window()
+                    .set_position(slint::PhysicalPosition::new(x, y));
+            }
+            hide_window_from_taskbar("VoidPath ED");
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, saved_x, saved_y);
+    }
+}
+
 pub fn show_window<T, F>(window: T, setup: F)
 where
     T: slint::ComponentHandle + 'static,
