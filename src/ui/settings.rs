@@ -267,7 +267,7 @@ pub fn show_settings_window(
                 }
             });
         },
-        480,
-        620,
+        460,
+        580,
     );
 }
