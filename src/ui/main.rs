@@ -82,7 +82,7 @@ pub fn update_main_ui(win: &MainWindow, state: &AppState, config: &AppConfig) {
 
         win.set_current_hop((cur_idx + 1) as i32);
         win.set_total_hops(total as i32);
-        win.set_total_profit(format_profit(state.total_route_profit()).into());
+        win.set_total_profit(format!("+{}", format_profit(state.total_route_profit())).into());
 
         if let Some(step) = route.get(cur_idx) {
             win.set_hop_distance(format_distance_ly(step.distance).into());
